@@ -4235,21 +4235,6 @@
                    {"SP":{{ns.SP}},"TMP":{{ns.TMP}},"REF":{{ns.REF}},"RFC":{{ns.RFC}},"SB":{{ns.SB}},"SPS":{{ns.SPS}},"TSL":{{ns.TSL}},"SBY":{{ns.SBY}}}
                  icon: "mdi:download"
    0x30:
-      0x02:
-         device_config:
-            command: ""
-            channel: ""
-            log_learn: ""
-            direction: ""
-            answer: ""
-         entities:
-            - component: binary_sensor
-              name: "Input_State"
-              config:
-                 state_topic: ""
-                 value_template: "{{ value_json.IPS }}"
-                 payload_on: "0"
-                 payload_off: "1"
       0x03:
          device_config:
             command: ""
