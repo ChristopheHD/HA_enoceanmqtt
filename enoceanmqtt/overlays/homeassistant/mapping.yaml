@@ -1412,6 +1412,20 @@
                  state_topic: "MT2"
                  value_template: "{{ value_json.EXHFS }}"
                  unit_of_measurement: "rpm"
+            - component: "sensor"
+              name: "air_quality_sensor"
+              config:
+                 state_topic: "MT2"
+                 value_template: "{{ value_json.AQS1 }}"
+                 unit_of_measurement: "%"
+            - component: binary_sensor
+              name: "filter_maintenance_required"
+              config:
+                 state_topic: "MT2"
+                 payload_on: "on"
+                 payload_off: "off"
+                 value_template: >-
+                    {% if value_json.FMS == 1 %}on{% else %}off{% endif %}
       0x01:
          device_config:
             command: "MT"
