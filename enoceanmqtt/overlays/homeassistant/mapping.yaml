@@ -1412,6 +1412,20 @@
                  state_topic: "MT2"
                  value_template: "{{ value_json.EXHFS }}"
                  unit_of_measurement: "rpm"
+            - component: "sensor"
+              name: "air_quality_sensor"
+              config:
+                 state_topic: "MT2"
+                 value_template: "{{ value_json.AQS1 }}"
+                 unit_of_measurement: "%"
+            - component: binary_sensor
+              name: "filter_maintenance_required"
+              config:
+                 state_topic: "MT2"
+                 payload_on: "on"
+                 payload_off: "off"
+                 value_template: >-
+                    {% if value_json.FMS == 1 %}on{% else %}off{% endif %}
       0x01:
          device_config:
             command: "MT"
@@ -4221,6 +4235,21 @@
                    {"SP":{{ns.SP}},"TMP":{{ns.TMP}},"REF":{{ns.REF}},"RFC":{{ns.RFC}},"SB":{{ns.SB}},"SPS":{{ns.SPS}},"TSL":{{ns.TSL}},"SBY":{{ns.SBY}}}
                  icon: "mdi:download"
    0x30:
+      0x02:
+         device_config:
+            command: ""
+            channel: ""
+            log_learn: ""
+            direction: ""
+            answer: ""
+         entities:
+            - component: binary_sensor
+              name: "Input_State"
+              config:
+                 state_topic: ""
+                 value_template: "{{ value_json.IPS }}"
+                 payload_on: "0"
+                 payload_off: "1"
       0x03:
          device_config:
             command: ""
