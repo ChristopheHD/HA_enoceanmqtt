@@ -21,7 +21,6 @@
                     {% elif value_json.OV >= 1 and value_json.OV <= 100 %}
                         ON
                     {% else %}
-                        None
                     {% endif %}
                  command_topic: "req"
                  payload_on: >
