@@ -1,0 +1,3 @@
+setuptools
+pyyaml==6.0.2
+tinydb==4.8.2
