@@ -5812,6 +5812,56 @@ afriso:
               state_class: "measurement"
               unit_of_measurement: "°C"
 
+# Mapping for Flextron devices
+flextron:
+   300621:
+      device_config:
+        - rorg: "0xD2"
+          func: "0x01"
+          type: "0x01"
+          command: "CMD"
+          channel: "CMD"
+          log_learn: ""
+          direction: ""
+          answer: ""
+      entities:
+         - component: "switch"
+           name: "switch1"
+           config:
+              state_topic: "CMD4"
+              state_on: "100"
+              state_off: "0"
+              value_template: >-
+                {% if value_json.IO == 0 and value_json.OV == 0 %}
+                  0
+                {% elif value_json.IO == 0 and value_json.OV >= 1 and value_json.OV <= 100 %}
+                  100
+                {% else %}
+                {% endif %}
+              command_topic: "req"
+              payload_on: >
+                {"CMD":"1","DV":"0","IO":"0","OV":"100","send":"clear"}
+              payload_off: >
+                {"CMD":"1","DV":"0","IO":"0","OV":"0","send":"clear"}
+         - component: "switch"
+           name: "switch2"
+           config:
+              state_topic: "CMD4"
+              state_on: "100"
+              state_off: "0"
+              value_template: >-
+                {% if value_json.IO == 1 and value_json.OV == 0 %}
+                  0
+                {% elif value_json.IO == 1 and value_json.OV >= 1 and value_json.OV <= 100 %}
+                  100
+                {% else %}
+                {% endif %}
+              command_topic: "req"
+              payload_on: >
+                {"CMD":"1","DV":"0","IO":"1","OV":"100","send":"clear"}
+              payload_off: >
+                {"CMD":"1","DV":"0","IO":"1","OV":"0","send":"clear"}
+
 # Below are mappings common to all EEPs
 common:
    rssi:
