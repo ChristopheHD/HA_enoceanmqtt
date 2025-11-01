@@ -44,11 +44,18 @@ class HACommunicator(Communicator):
                     pass
 
                 # Set EEP-related device configuration
-                cur_sensor['command'] = devcfg.get('command')
-                cur_sensor['channel'] = devcfg.get('channel')
-                cur_sensor['log_learn'] = devcfg.get('log_learn')
-                cur_sensor['direction'] = devcfg.get('direction')
-                cur_sensor['answer'] = devcfg.get('answer')
+                # Only set fields if they have non-empty values to avoid passing empty strings
+                # to the EnOcean library which expects None for unset parameters
+                if devcfg.get('command'):
+                    cur_sensor['command'] = devcfg.get('command')
+                if devcfg.get('channel'):
+                    cur_sensor['channel'] = devcfg.get('channel')
+                if devcfg.get('log_learn'):
+                    cur_sensor['log_learn'] = devcfg.get('log_learn')
+                if devcfg.get('direction'):
+                    cur_sensor['direction'] = devcfg.get('direction')
+                if devcfg.get('answer'):
+                    cur_sensor['answer'] = devcfg.get('answer')
 
                 # Better to work with JSON in HA so force JSON usage
                 # Also force publish_rssi, publish_date and persistent
