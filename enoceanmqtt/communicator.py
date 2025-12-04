@@ -118,7 +118,7 @@ class Communicator:
         # Get how to handle MQTT message
         try:
             mqtt_payload = json.loads(msg.payload)
-        except (JSONDecodeError, UnicodeDecodeError):
+        except (ValueError, UnicodeDecodeError):
             mqtt_payload = msg.payload
 
         if isinstance(mqtt_payload, dict):
@@ -208,10 +208,9 @@ class Communicator:
                             clear = True
                         elif action == "learn":
                             cur_sensor['learn'] = True
-                        elif action == "raw_data":
-                            if 'raw_data' in mqtt_json_payload:
-                                cur_sensor['raw_data'] = mqtt_json_payload['raw_data']
-                                del mqtt_json_payload['raw_data']
+                        elif action == "raw_data" and 'raw_data' in mqtt_json_payload:
+                            cur_sensor['raw_data'] = mqtt_json_payload['raw_data']
+                            del mqtt_json_payload['raw_data']
 
                     # Remove 'send' field as it is not part of EnOcean data
                     del mqtt_json_payload['send']
@@ -221,7 +220,8 @@ class Communicator:
                     try:
                         mqtt_json_payload[topic] = int(mqtt_json_payload[topic])
                     except ValueError:
-                        logging.warning("Cannot parse int value for %s: %s", topic, mqtt_json_payload[topic])
+                        logging.warning("Cannot parse int value for %s: %s", topic, 
+                                        mqtt_json_payload[topic])
                         del mqtt_json_payload[topic]
 
                 # Append received data to cur_sensor['data'].
@@ -266,7 +266,7 @@ class Communicator:
         self._send_packet(sensor, destination, command)
 
         # Clear sent data, if requested by the sent message
-        if clear == True:
+        if clear:
             logging.debug('Clearing data buffer.')
             del sensor['data']
 
@@ -556,8 +556,6 @@ class Communicator:
         # first, look whether we have this sensor configured
         found_sensor = False
         for cur_sensor in self.sensors:
-#            if 'address' in cur_sensor and \
-#                    enocean.utils.combine_hex(packet.sender) == cur_sensor['address']:
             # Does this sensor match?
             if (enocean.utils.combine_hex(packet.sender) == cur_sensor.get('address')) and \
                ((packet.rorg == cur_sensor.get('rorg')) or \
@@ -575,8 +573,8 @@ class Communicator:
 
         # abort loop if sensor not found
         if not found_sensor:
-            logging.info("unknown sensor: %s (RORG = %s)", enocean.utils.to_hex_string(packet.sender),
-                         hex(packet.rorg))
+            logging.info("unknown sensor: %s (RORG = %s)", 
+                         enocean.utils.to_hex_string(packet.sender), hex(packet.rorg))
             return
 
         # Handling EnOcean library decision to set learn to True by default.
