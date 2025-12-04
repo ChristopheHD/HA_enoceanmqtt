@@ -1,0 +1,20 @@
+name: YAML Lint
+
+on:
+  pull_request:
+    paths:
+      - 'enoceanmqtt/overlays/homeassistant/mapping.yaml'
+
+jobs:
+  yamllint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Install yamllint
+        run: pip install yamllint
+      - name: Run yamllint
+        run: yamllint enoceanmqtt/overlays/homeassistant/mapping.yaml
