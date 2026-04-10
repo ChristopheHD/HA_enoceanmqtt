@@ -5962,7 +5962,7 @@ eltako:
       config:
         state_topic: ""
         value_template: >-
-          {% if value_json.PIRS >= 128 %}ON{% else %}OFF{% endif %}
+          ON
         device_class: "occupancy"
         off_delay: 60
 
