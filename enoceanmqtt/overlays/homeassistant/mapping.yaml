@@ -5960,7 +5960,7 @@ eltako:
     - component: binary_sensor
       name: "pir"
       config:
-        state_topic: ""
+        state_topic: "a5"
         value_template: >-
           ON
         device_class: "occupancy"
