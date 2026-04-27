@@ -6037,6 +6037,7 @@ cerv:
         config:
           device_class: "power"
           state_topic: "a5"
+          off_delay: 130
           value_template: >-
             {% if value_json.PIRS >= 128 %}ON{% else %}OFF{% endif %}
   erm-dau-277: *erm-dau-lv
