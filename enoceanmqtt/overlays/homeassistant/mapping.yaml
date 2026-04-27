@@ -6021,6 +6021,26 @@ nodon:
         - "1"
         - "2"
 
+cerv:
+  erm-dau-lv: &erm-dau-lv
+    - rorg: "0xA5"
+      func: "0x07"
+      type: "0x01"
+      command: ""
+      channel: ""
+      log_learn: ""
+      direction: ""
+      answer: ""
+    entities:
+      - component: binary_sensor
+        name: "circuit"
+        config:
+          device_class: "power"
+          state_topic: "a5"
+          value_template: >-
+            {% if value_json.PIRS >= 128 %}ON{% else %}OFF{% endif %}
+  erm-dau-277: *erm-dau-lv
+
 # Below are mappings common to all EEPs
 common:
   rssi:
