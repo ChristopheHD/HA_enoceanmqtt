@@ -6021,7 +6021,7 @@ nodon:
         - "1"
         - "2"
 
-cerv:
+etc-midwest:
   erm-dau-lv: &erm-dau-lv
     - rorg: "0xA5"
       func: "0x07"
