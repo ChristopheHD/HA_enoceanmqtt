@@ -72,14 +72,14 @@
           device_class: "energy"
           unit_of_measurement: "Wh"
           value_template: >-
-            {% if value_json.UN == 0 %}
-              {{ (value_json.MV|int / 3600)|int }}
-            {% elif value_json.UN == 1 %}
-              {{ value_json.MV }}
-            {% elif value_json.UN == 2 %}
-              {{ value_json.MV|int * 1000 }}
-            {% else %}
-              {{ states(entity_id)|int(default=0) }}
+            {% if value_json.IO == 0 %}
+              {% if value_json.UN == 0 %}
+                {{ (value_json.MV|int / 3600)|int }}
+              {% elif value_json.UN == 1 %}
+                {{ value_json.MV }}
+              {% elif value_json.UN == 2 %}
+                {{ value_json.MV|int * 1000 }}
+              {% endif %}
             {% endif %}
       - component: "sensor"
         name: "power"
@@ -89,12 +89,12 @@
           device_class: "power"
           unit_of_measurement: "W"
           value_template: >-
-            {% if value_json.UN == 3 %}
-              {{ value_json.MV }}
-            {% elif value_json.UN == 4 %}
-              {{ value_json.MV|int * 1000 }}
-            {% else %}
-              {{ states(entity_id)|int(default=0) }}
+            {% if value_json.IO == 0 %}
+              {% if value_json.UN == 3 %}
+                {{ value_json.MV }}
+              {% elif value_json.UN == 4 %}
+                {{ value_json.MV|int * 1000 }}
+              {% endif %}
             {% endif %}
       - component: "button"
         name: "query_energy"
@@ -238,14 +238,14 @@
           device_class: "energy"
           unit_of_measurement: "Wh"
           value_template: >-
-            {% if value_json.UN == 0 %}
-              {{ (value_json.MV|int / 3600)|int }}
-            {% elif value_json.UN == 1 %}
-              {{ value_json.MV }}
-            {% elif value_json.UN == 2 %}
-              {{ value_json.MV|int * 1000 }}
-            {% else %}
-              {{ states(entity_id)|int(default=0) }}
+            {% if value_json.IO == 0 %}
+              {% if value_json.UN == 0 %}
+                {{ (value_json.MV|int / 3600)|int }}
+              {% elif value_json.UN == 1 %}
+                {{ value_json.MV }}
+              {% elif value_json.UN == 2 %}
+                {{ value_json.MV|int * 1000 }}
+              {% endif %}
             {% endif %}
       - component: "sensor"
         name: "power"
@@ -255,12 +255,12 @@
           device_class: "power"
           unit_of_measurement: "W"
           value_template: >-
-            {% if value_json.UN == 3 %}
-              {{ value_json.MV }}
-            {% elif value_json.UN == 4 %}
-              {{ value_json.MV|int * 1000 }}
-            {% else %}
-              {{ states(entity_id)|int(default=0) }}
+            {% if value_json.IO == 0 %}
+              {% if value_json.UN == 3 %}
+                {{ value_json.MV }}
+              {% elif value_json.UN == 4 %}
+                {{ value_json.MV|int * 1000 }}
+              {% endif %}
             {% endif %}
       - component: "button"
         name: "query_energy"
@@ -455,14 +455,14 @@
           device_class: "energy"
           unit_of_measurement: "Wh"
           value_template: >-
-            {% if value_json.UN == 0 %}
-              {{ (value_json.MV|int / 3600)|int }}
-            {% elif value_json.UN == 1 %}
-              {{ value_json.MV }}
-            {% elif value_json.UN == 2 %}
-              {{ value_json.MV|int * 1000 }}
-            {% else %}
-              {{ states(entity_id)|int(default=0) }}
+            {% if value_json.IO == 0 %}
+              {% if value_json.UN == 0 %}
+                {{ (value_json.MV|int / 3600)|int }}
+              {% elif value_json.UN == 1 %}
+                {{ value_json.MV }}
+              {% elif value_json.UN == 2 %}
+                {{ value_json.MV|int * 1000 }}
+              {% endif %}
             {% endif %}
       - component: "sensor"
         name: "power"
@@ -472,12 +472,12 @@
           device_class: "power"
           unit_of_measurement: "W"
           value_template: >-
-            {% if value_json.UN == 3 %}
-              {{ value_json.MV }}
-            {% elif value_json.UN == 4 %}
-              {{ value_json.MV|int * 1000 }}
-            {% else %}
-              {{ states(entity_id)|int(default=0) }}
+            {% if value_json.IO == 0 %}
+              {% if value_json.UN == 3 %}
+                {{ value_json.MV }}
+              {% elif value_json.UN == 4 %}
+                {{ value_json.MV|int * 1000 }}
+              {% endif %}
             {% endif %}
       - component: "button"
         name: "query_status"
@@ -635,14 +635,14 @@
           device_class: "energy"
           unit_of_measurement: "Wh"
           value_template: >-
-            {% if value_json.UN == 0 %}
-              {{ (value_json.MV|int / 3600)|int }}
-            {% elif value_json.UN == 1 %}
-              {{ value_json.MV }}
-            {% elif value_json.UN == 2 %}
-              {{ value_json.MV|int * 1000 }}
-            {% else %}
-              {{ states(entity_id)|int(default=0) }}
+            {% if value_json.IO == 0 %}
+              {% if value_json.UN == 0 %}
+                {{ (value_json.MV|int / 3600)|int }}
+              {% elif value_json.UN == 1 %}
+                {{ value_json.MV }}
+              {% elif value_json.UN == 2 %}
+                {{ value_json.MV|int * 1000 }}
+              {% endif %}
             {% endif %}
       - component: "sensor"
         name: "power"
@@ -652,12 +652,12 @@
           device_class: "power"
           unit_of_measurement: "W"
           value_template: >-
-            {% if value_json.UN == 3 %}
-              {{ value_json.MV }}
-            {% elif value_json.UN == 4 %}
-              {{ value_json.MV|int * 1000 }}
-            {% else %}
-              {{ states(entity_id)|int(default=0) }}
+            {% if value_json.IO == 0 %}
+              {% if value_json.UN == 3 %}
+                {{ value_json.MV }}
+              {% elif value_json.UN == 4 %}
+                {{ value_json.MV|int * 1000 }}
+              {% endif %}
             {% endif %}
       - component: "button"
         name: "query_mode"
@@ -842,14 +842,14 @@
           device_class: "energy"
           unit_of_measurement: "Wh"
           value_template: >-
-            {% if value_json.UN == 0 %}
-              {{ (value_json.MV|int / 3600)|int }}
-            {% elif value_json.UN == 1 %}
-              {{ value_json.MV }}
-            {% elif value_json.UN == 2 %}
-              {{ value_json.MV|int * 1000 }}
-            {% else %}
-              {{ states(entity_id)|int(default=0) }}
+            {% if value_json.IO == 0 %}
+              {% if value_json.UN == 0 %}
+                {{ (value_json.MV|int / 3600)|int }}
+              {% elif value_json.UN == 1 %}
+                {{ value_json.MV }}
+              {% elif value_json.UN == 2 %}
+                {{ value_json.MV|int * 1000 }}
+              {% endif %}
             {% endif %}
       - component: "sensor"
         name: "power"
@@ -859,12 +859,12 @@
           device_class: "power"
           unit_of_measurement: "W"
           value_template: >-
-            {% if value_json.UN == 3 %}
-              {{ value_json.MV }}
-            {% elif value_json.UN == 4 %}
-              {{ value_json.MV|int * 1000 }}
-            {% else %}
-              {{ states(entity_id)|int(default=0) }}
+            {% if value_json.IO == 0 %}
+              {% if value_json.UN == 3 %}
+                {{ value_json.MV }}
+              {% elif value_json.UN == 4 %}
+                {{ value_json.MV|int * 1000 }}
+              {% endif %}
             {% endif %}
       - component: "button"
         name: "query_status"
