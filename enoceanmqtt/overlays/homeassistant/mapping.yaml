@@ -5956,6 +5956,25 @@ eltako:
   futh55ed_control: *futh65d_control
   futh55ed_heating: *futh65d_heating
   futh55ed_hygro: *futh65d_hygro
+  tf-bsb:
+    device_config:
+    - rorg: "0xA5"
+      func: "0x07"
+      type: "0x01"
+      command: ""
+      channel: ""
+      log_learn: ""
+      direction: ""
+      answer: ""
+    entities:
+    - component: binary_sensor
+      name: "pir"
+      config:
+        state_topic: "a5"
+        value_template: >-
+          ON
+        device_class: "occupancy"
+        off_delay: 60
 
 # Mapping for Afriso devices
 afriso:
