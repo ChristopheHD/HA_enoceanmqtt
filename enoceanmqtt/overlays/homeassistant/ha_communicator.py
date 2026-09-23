@@ -7,6 +7,7 @@ import os
 import time
 import json
 import yaml
+import threading
 
 import enocean.utils
 from enoceanmqtt.communicator import Communicator
@@ -197,6 +198,9 @@ class HACommunicator(Communicator):
                                   'ON' if self.enocean.teach_in else 'OFF',
                                   retain=True)
 
+                # Clear retained messages for non-persistent sensors
+                self._clear_retained_messages(mqtt_client)
+
                 # First MQTT connection is done
                 self._first_mqtt_connect = False
         else:
@@ -213,9 +217,64 @@ class HACommunicator(Communicator):
         elif msg.topic.startswith(self._mqtt_discovery_prefix) and msg.topic.endswith('/config'):
             if len(msg.payload) == 0:
                 self._handle_system_msg(msg, delete=True)
+        # Intercept sensor state messages (especially retained ones)
+        elif self._is_sensor_state_topic(_mqtt_client, msg):
+            # Do nothing further, as it's a state topic that shouldn't be processed as input
+            # Clearing of retained messages is handled inside _is_sensor_state_topic
+            pass
         # Device messages
         else:
             super()._on_mqtt_message(_mqtt_client, _userdata, msg)
+
+    def _is_sensor_state_topic(self, mqtt_client, msg):
+        """Check if message is on a state topic and optionally clear if retained and non-persistent."""
+        found_state_topic = False
+
+        # Determine which sensors match this topic as a state topic
+        matching_sensors = []
+        for cur_sensor in self.sensors:
+            if msg.topic == cur_sensor['name'] or msg.topic.startswith(cur_sensor['name'] + "/"):
+                if not msg.topic.startswith(cur_sensor['name'] + "/req/") and msg.topic != cur_sensor['name'] + "/req":
+                    matching_sensors.append(cur_sensor)
+
+        if matching_sensors:
+            found_state_topic = True
+
+            # If retained and we don't want persistence, clear it
+            if msg.retain and len(msg.payload) > 0:
+                for cur_sensor in matching_sensors:
+                    if str(cur_sensor.get('persistent', "1")) not in ("True", "true", "1"):
+                        logging.debug("Clearing retained message on topic: %s", msg.topic)
+                        mqtt_client.publish(msg.topic, "", retain=True)
+                        break # Only clear once
+
+        return found_state_topic
+
+    def _clear_retained_messages(self, mqtt_client):
+        """Temporarily subscribe to non-persistent sensor topics to clear retained messages."""
+        topics_to_subscribe = []
+        for cur_sensor in self.sensors:
+            if str(cur_sensor.get('persistent', "1")) not in ("True", "true", "1"):
+                base_topic = cur_sensor['name']
+                topics_to_subscribe.append(base_topic)
+                topics_to_subscribe.append(base_topic + "/#")
+
+        if not topics_to_subscribe:
+            return
+
+        def _subscribe_wait_unsubscribe():
+            for topic in topics_to_subscribe:
+                mqtt_client.subscribe(topic)
+
+            # Wait for any retained messages to arrive and be processed
+            time.sleep(2)
+
+            for topic in topics_to_subscribe:
+                mqtt_client.unsubscribe(topic)
+
+            logging.debug("Finished clearing retained messages for non-persistent sensors")
+
+        threading.Thread(target=_subscribe_wait_unsubscribe, daemon=True).start()
 
 
     #=============================================================================================
