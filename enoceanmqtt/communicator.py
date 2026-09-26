@@ -76,6 +76,8 @@ class Communicator:
             logging.info("connecting Serial to %s", eport)
             self.enocean = SerialCommunicator(eport)
 
+        self._block_send_to_self()
+
         self.enocean.start()
         # sender will be automatically determined
         self.enocean_sender = None
@@ -589,6 +591,23 @@ class Communicator:
         # send it
         logging.info("sending: %s", packet)
         self.enocean.send(packet)
+
+    def _block_send_to_self(self):
+        '''Drop radio packets addressed to our own base ID.
+
+        The EnOcean library answers every UTE teach-in request itself. A repeater
+        echoes that answer back, and the library then answers its own echo,
+        endlessly. Sending a packet to ourselves is never useful, so block it.'''
+        orig_send = self.enocean.send
+
+        def send_not_to_self(packet):
+            destination = getattr(packet, 'destination', None)
+            if packet.packet_type == PACKET.RADIO and destination is not None and self.enocean_sender is not None and enocean.utils.combine_hex(destination) == enocean.utils.combine_hex(self.enocean_sender):
+                logging.debug("Not sending packet addressed to own base ID.")
+                return False
+            return orig_send(packet)
+
+        self.enocean.send = send_not_to_self
 
     def _process_radio_packet(self, packet):
         # first, look whether we have this sensor configured
