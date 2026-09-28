@@ -589,11 +589,31 @@ class Communicator:
         logging.info("sending: %s", packet)
         self.enocean.send(packet)
 
+    def _confirm_vld_teach_in(self, packet, sensors):
+        '''Answer a UTE teach-in request of a VLD device with command 0.
+
+        Some VLD devices (e.g. LUNOS UNI-EO, EEP D2-50-00) do not expect a UTE
+        response, but a VLD telegram with message type 0 as teach-in confirmation.'''
+        if packet.rorg != RORG.UTE or not getattr(self.enocean, 'teach_in', False):
+            return
+        for sensor in sensors:
+            command_shortcut = sensor.get('command')
+            if sensor.get('rorg') == RORG.VLD and command_shortcut:
+                logging.info("Sending VLD teach-in confirmation to %s.",
+                             enocean.utils.to_hex_string(packet.sender))
+                ack_sensor = dict(sensor)
+                ack_sensor['data'] = {command_shortcut: 0}
+                ack_sensor.pop('raw_data', None)
+                self._send_packet(ack_sensor, packet.sender, 0)
+                return
+
     def _process_radio_packet(self, packet):
         # first, look whether we have this sensor configured
         found_sensor = False
         address = enocean.utils.combine_hex(packet.sender)
         potential_sensors = self._sensors_by_address.get(address, [])
+
+        self._confirm_vld_teach_in(packet, potential_sensors)
 
         for cur_sensor in potential_sensors:
             # Does this sensor match?
