@@ -292,8 +292,7 @@ class Communicator:
 
         if command_shortcut:
             # Check MQTT message sets the command field
-            #if 'data' not in sensor or command_shortcut not in sensor['data'] or sensor['data'][command_shortcut] is None:
-            if not sensor.get('data') or not sensor.get('data').get(command_shortcut):
+            if 'data' not in sensor or sensor['data'].get(command_shortcut) is None:
                 logging.warning(
                     'Command field %s must be set in MQTT message!', command_shortcut)
                 return
