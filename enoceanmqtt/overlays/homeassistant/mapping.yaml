@@ -1833,6 +1833,22 @@
           state_class: "measurement"
           unit_of_measurement: "°C"
       - component: "sensor"
+        name: "t_indoor"
+        config:
+          state_topic: "MT2"
+          value_template: "{{ value_json.INT }}"
+          device_class: "temperature"
+          state_class: "measurement"
+          unit_of_measurement: "°C"
+      - component: "sensor"
+        name: "t_exhaust"
+        config:
+          state_topic: "MT2"
+          value_template: "{{ value_json.EXHT }}"
+          device_class: "temperature"
+          state_class: "measurement"
+          unit_of_measurement: "°C"
+      - component: "sensor"
         name: "supply_air_flow"
         config:
           state_topic: "MT2"
