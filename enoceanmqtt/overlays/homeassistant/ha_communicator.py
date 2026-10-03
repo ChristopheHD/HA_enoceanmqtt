@@ -12,11 +12,12 @@ import enocean.utils
 from enoceanmqtt.communicator import Communicator
 from enoceanmqtt.overlays.homeassistant.device_manager import DeviceManager
 
+REPOSITORY_URL = 'https://github.com/ChristopheHD/HA_enoceanmqtt'
+
 class HACommunicator(Communicator):
     '''Home Assistant-oriented Communicator subclass for enoceanmqtt'''
     _mqtt_discovery_prefix = None
     _devmgr = None
-    _first_mqtt_connect = True
     _system_status_topic = {}
 
     def __init__(self, config, sensors):
@@ -125,80 +126,86 @@ class HACommunicator(Communicator):
     def _on_connect(self, mqtt_client, _userdata, _flags, return_code):
         '''callback for when the client receives a CONNACK response from the MQTT server.'''
         if return_code == 0:
+            self._mqtt_connected = True
             logging.info("Succesfully connected to MQTT broker.")
             # listen to enocean send requests
             for cur_sensor in self.sensors:
                 mqtt_client.subscribe(cur_sensor['name']+'/req/#')
 
-            # MQTT operations at startup only
-            if self._first_mqtt_connect:
-                # Get all device UIDs in DB
-                known_uids = self._devmgr.db_list_from_fields('uid')
+            # Create the retained bridge state topic immediately; it will be
+            # replaced by "online" once the bridge is fully ready.
+            self._publish_bridge_state(self.BRIDGE_STATE_OFFLINE)
 
-                # This will discover new added sensors in HA while updating existing sensors
-                # configuration when sensor mapping has changed
-                for cur_sensor in self.sensors:
-                    if str(cur_sensor.get('ignore')) not in ("True", "true", "1"):
-                        if not cur_sensor.get('model'):
-                            # Create sensor UID
-                            eep = format((cur_sensor['rorg']<<16)+(cur_sensor['func']<<8)+cur_sensor['type'], '06X')
-                            try:
-                                sender = format(cur_sensor.get('sender'),'08X')
-                            except:
-                                sender = 'NONE'
-                            dev_uid = eep+"_"+format(cur_sensor['address'],'08X')+"_"+sender
-                            # Get sensor from DB if it exists
-                            sensor_db = self._devmgr.db_get_device_by_field('name', cur_sensor['name'])
-                            # Sensor discovery/update
-                            cfgtopics = sensor_db.get('cfgtopics', None) if sensor_db else None
-                            self._mqtt_discovery_eep(cur_sensor, cfgtopics)
-                            # Remove device from the UID list
-                            try:
-                                known_uids.remove(dev_uid)
-                            except ValueError:
-                                pass
-                        else:
-                            # Create sensor UID
-                            try:
-                                sender = format(cur_sensor.get('sender'),'08X')
-                            except:
-                                sender = 'NONE'
-                            dev_uid = cur_sensor['manufacturer']+"_"+cur_sensor['model']+"_"+format(cur_sensor['address'],'08X')+"_"+sender
-                            # Retrieve device name from sensor name by removing "/RORG" at the end
-                            name = cur_sensor['name'][:-3]
-                            # Get sensor from DB if it exists
-                            sensor_db = self._devmgr.db_get_device_by_field('name', name)
-                            # Sensor discovery/update
-                            cfgtopics = sensor_db.get('cfgtopics', None) if sensor_db else None
-                            self._mqtt_discovery_model(cur_sensor, cfgtopics)
-                            # Remove device from the UID list
-                            try:
-                                known_uids.remove(dev_uid)
-                            except ValueError:
-                                pass
+            self._mqtt_discovery_bridge()
 
-                # Delete devices that are no more listed in config file
-                logging.debug("List of remaining UIDS: %s", str(known_uids))
-                for dev_uid in known_uids:
-                    sensor_db = self._devmgr.db_get_device_by_field('uid', dev_uid)
-                    # Remove all device's entities
-                    if sensor_db:
-                        for cfgtopic in sensor_db.get('cfgtopics', []):
-                            self.mqtt.publish(f"{self._mqtt_discovery_prefix}{cfgtopic}",
-                                               "", retain=True)
-                    # Remove the device from the database
-                    self._devmgr.db_remove_device_by_field('uid', dev_uid)
+            # Refresh discovery on every successful MQTT connection so retained
+            # configs stay aligned with the current bridge state and mapping.
+            known_uids = self._devmgr.db_list_from_fields('uid')
 
-                # Add LEARN button in HA
-                self._mqtt_discovery_system('learn')
+            # This will discover new added sensors in HA while updating existing sensors
+            # configuration when sensor mapping has changed
+            for cur_sensor in self.sensors:
+                if str(cur_sensor.get('ignore')) not in ("True", "true", "1"):
+                    if not cur_sensor.get('model'):
+                        # Create sensor UID
+                        eep = format((cur_sensor['rorg']<<16)+(cur_sensor['func']<<8)+cur_sensor['type'], '06X')
+                        try:
+                            sender = format(cur_sensor.get('sender'),'08X')
+                        except:
+                            sender = 'NONE'
+                        dev_uid = eep+"_"+format(cur_sensor['address'],'08X')+"_"+sender
+                        # Get sensor from DB if it exists
+                        sensor_db = self._devmgr.db_get_device_by_field('name', cur_sensor['name'])
+                        # Sensor discovery/update
+                        cfgtopics = sensor_db.get('cfgtopics', None) if sensor_db else None
+                        self._mqtt_discovery_eep(cur_sensor, cfgtopics)
+                        # Remove device from the UID list
+                        try:
+                            known_uids.remove(dev_uid)
+                        except ValueError:
+                            pass
+                    else:
+                        # Create sensor UID
+                        try:
+                            sender = format(cur_sensor.get('sender'),'08X')
+                        except:
+                            sender = 'NONE'
+                        dev_uid = cur_sensor['manufacturer']+"_"+cur_sensor['model']+"_"+format(cur_sensor['address'],'08X')+"_"+sender
+                        # Retrieve device name from sensor name by removing "/RORG" at the end
+                        name = cur_sensor['name'][:-3]
+                        # Get sensor from DB if it exists
+                        sensor_db = self._devmgr.db_get_device_by_field('name', name)
+                        # Sensor discovery/update
+                        cfgtopics = sensor_db.get('cfgtopics', None) if sensor_db else None
+                        self._mqtt_discovery_model(cur_sensor, cfgtopics)
+                        # Remove device from the UID list
+                        try:
+                            known_uids.remove(dev_uid)
+                        except ValueError:
+                            pass
 
-                # LEARN status
-                self.mqtt.publish(self._system_status_topic['learn'],
-                                  'ON' if self.enocean.teach_in else 'OFF',
-                                  retain=True)
+            # Delete devices that are no more listed in config file
+            logging.debug("List of remaining UIDS: %s", str(known_uids))
+            for dev_uid in known_uids:
+                sensor_db = self._devmgr.db_get_device_by_field('uid', dev_uid)
+                # Remove all device's entities
+                if sensor_db:
+                    for cfgtopic in sensor_db.get('cfgtopics', []):
+                        self.mqtt.publish(f"{self._mqtt_discovery_prefix}{cfgtopic}",
+                                           "", retain=True)
+                # Remove the device from the database
+                self._devmgr.db_remove_device_by_field('uid', dev_uid)
 
-                # First MQTT connection is done
-                self._first_mqtt_connect = False
+            # Add LEARN button in HA
+            self._mqtt_discovery_system('learn')
+
+            # LEARN status
+            self.mqtt.publish(self._system_status_topic['learn'],
+                              'ON' if self.enocean.teach_in else 'OFF',
+                              retain=True)
+
+            # Announce the bridge as online once discovery and the EnOcean sender are ready.
+            self._maybe_publish_bridge_online()
         else:
             logging.error("Error connecting to MQTT broker: %s",
                           self.CONNECTION_RETURN_CODE[return_code]
@@ -221,9 +228,105 @@ class HACommunicator(Communicator):
     #=============================================================================================
     # SYSTEM
     #=============================================================================================
+    def _bridge_availability(self):
+        """return the Home Assistant availability block for the bridge topic"""
+        return [{
+            'topic': self._bridge_state_topic(),
+            'value_template': '{{ value_json.state }}',
+        }]
+
+    def _apply_bridge_availability(self, cfg):
+        """merge bridge availability with any existing legacy availability settings"""
+        availability = []
+        legacy_topic = cfg.pop('availability_topic', None)
+        legacy_template = cfg.pop('availability_template', None)
+        legacy_payload_available = cfg.pop('payload_available', None)
+        legacy_payload_not_available = cfg.pop('payload_not_available', None)
+        if legacy_topic not in (None, ""):
+            legacy_entry = {'topic': legacy_topic}
+            if legacy_template not in (None, ""):
+                legacy_entry['value_template'] = legacy_template
+            if legacy_payload_available not in (None, ""):
+                legacy_entry['payload_available'] = legacy_payload_available
+            if legacy_payload_not_available not in (None, ""):
+                legacy_entry['payload_not_available'] = legacy_payload_not_available
+            availability.append(legacy_entry)
+        if cfg.get('availability'):
+            availability.extend(cfg.pop('availability'))
+        availability.extend(self._bridge_availability())
+        cfg['availability'] = availability
+        cfg['availability_mode'] = 'all'
+
+    def _bridge_device(self):
+        """build the Home Assistant device block for the bridge"""
+        client_id = self.conf.get('mqtt_client_id', self._mqtt_base_topic())
+        return {
+            'name': 'Enocean Bridge',
+            'identifiers': f'enoceanmqtt_bridge_{client_id}',
+            'manufacturer': REPOSITORY_URL,
+            'model': 'Enocean Bridge',
+            'sw_version': self.build_version,
+            'hw_version': self.conf.get('enocean_port', 'unknown'),
+        }
+
+    def _bridge_device_identifier(self):
+        """return the Home Assistant identifier used for the bridge device"""
+        return self._bridge_device()['identifiers']
+
+    def _mqtt_discovery_bridge(self):
+        """Publish MQTT discovery for bridge diagnostic entities"""
+        device = self._bridge_device()
+        bridge_uid = device['identifiers']
+        bridge_availability = self._bridge_availability()
+
+        connection_cfg = {
+            'device': copy.deepcopy(device),
+            'device_class': 'connectivity',
+            'entity_category': 'diagnostic',
+            'name': 'Connection state',
+            'object_id': 'enoceanmqtt_bridge_connection_state',
+            'origin': {
+                'name': 'enocean2mqtt',
+                'sw': self.build_version,
+                'url': REPOSITORY_URL,
+            },
+            'payload_off': 'offline',
+            'payload_on': 'online',
+            'state_topic': self._bridge_state_topic(),
+            'unique_id': f'{bridge_uid}_connection_state',
+            'value_template': '{{ value_json.state }}',
+        }
+
+        version_cfg = {
+            'availability': copy.deepcopy(bridge_availability),
+            'availability_mode': 'all',
+            'device': copy.deepcopy(device),
+            'entity_category': 'diagnostic',
+            'icon': 'mdi:information-outline',
+            'name': 'Version',
+            'object_id': 'enoceanmqtt_bridge_version',
+            'origin': {
+                'name': 'enocean2mqtt',
+                'sw': self.build_version,
+                'url': REPOSITORY_URL,
+            },
+            'state_topic': self._bridge_info_topic(),
+            'unique_id': f'{bridge_uid}_version',
+            'value_template': '{{ value_json.version }}',
+        }
+
+        self.mqtt.publish(f"{self._mqtt_discovery_prefix}binary_sensor/enoceanmqtt_bridge/connection_state/config",
+                          json.dumps(connection_cfg),
+                          retain=True)
+        self.mqtt.publish(f"{self._mqtt_discovery_prefix}sensor/enoceanmqtt_bridge/version/config",
+                          json.dumps(version_cfg),
+                          retain=True)
+        self.mqtt.publish(self._bridge_info_topic(), self._bridge_info_payload(), retain=True)
+
     def _mqtt_discovery_system(self, attr):
         '''Publish MQTT discovery system entities configuration to Home Assistant'''
         device_map = copy.deepcopy(self._ha_mapping['system'][attr])
+        bridge_device = self._bridge_device()
         for entity in device_map:
             cfg = entity['config']
             # Wait for the transmitter ID
@@ -250,15 +353,19 @@ class HACommunicator(Communicator):
             # The entity name to be displayed in HA
             cfg['name'] = entity['name']
 
-            # Associate all entities to the device in HA
-            cfg['device'] = {}
-            cfg['device']['name'] = 'ENOCEANMQTT'
-            cfg['device']['identifiers'] = sender_hex
-            cfg['device']['model'] = 'Virtual @'+sender_hex
-            cfg['device']['manufacturer'] = 'https://github.com/ChristopheHD/HA_enoceanmqtt'
+            # Associate system entities to the bridge device in HA
+            cfg['device'] = copy.deepcopy(bridge_device)
 
             # The configuration topic defined for MQTT Discovery
             cfgtopic = f"{self._mqtt_discovery_prefix}{entity['component']}/{uid}/config"
+
+            # TODO: remove this legacy purge in the next version once the
+            # retained discovery migration for learn has been absorbed by HA.
+            # Force a clean re-discovery for learn so Home Assistant migrates
+            # the entity to the bridge device even if it previously existed
+            # under an older retained payload.
+            if attr == 'learn':
+                self.mqtt.publish(cfgtopic, "", retain=True)
 
             # Append defined entity's topics to the device topic
             for key in cfg:
@@ -267,6 +374,8 @@ class HACommunicator(Communicator):
                         cfg[key] = self.conf['mqtt_prefix']+'__system/'+cfg[key]
                     else:
                         cfg[key] = self.conf['mqtt_prefix']+'__system'
+
+            self._apply_bridge_availability(cfg)
 
             # Publish the device configuration to MQTT for discovery
             self.mqtt.publish(cfgtopic, json.dumps(cfg), retain=True)
@@ -356,6 +465,7 @@ class HACommunicator(Communicator):
             cfg['device'] = {}
             cfg['device']['name'] = dev_name
             cfg['device']['identifiers'] = address if address != 'FFFFFFFF' else dev_uid
+            cfg['device']['via_device'] = self._bridge_device_identifier()
             cfg['device']['model'] = eep_dash+" @"+address if address != 'FFFFFFFF' else \
                                      eep_dash+' (VIRTUAL) / '+sender+'->'+address
             cfg['device']['manufacturer'] = "EnOcean"
@@ -376,6 +486,8 @@ class HACommunicator(Communicator):
                         cfg[key] = sensor['name']+"/"+cfg[key]
                     else:
                         cfg[key] = sensor['name']
+
+            self._apply_bridge_availability(cfg)
 
             # Publish the device configuration to MQTT for discovery
             self.mqtt.publish(f"{self._mqtt_discovery_prefix}{cfgtopic}",
@@ -475,6 +587,7 @@ class HACommunicator(Communicator):
             cfg['device'] = {}
             cfg['device']['name'] = dev_name
             cfg['device']['identifiers'] = address if address != 'FFFFFFFF' else dev_uid
+            cfg['device']['via_device'] = self._bridge_device_identifier()
             cfg['device']['model'] = model.upper()+" @"+address if address != 'FFFFFFFF' else \
                                      model.upper()+' (VIRTUAL) / '+sender+'->'+address
             cfg['device']['manufacturer'] = manufacturer
@@ -494,6 +607,8 @@ class HACommunicator(Communicator):
                         cfg[key] = name+"/"+cfg[key]
                     else:
                         cfg[key] = name
+
+            self._apply_bridge_availability(cfg)
 
             # Publish the device configuration to MQTT for discovery
             self.mqtt.publish(f"{self._mqtt_discovery_prefix}{cfgtopic}",
@@ -530,6 +645,9 @@ class HACommunicator(Communicator):
                     self.enocean.teach_in = msg.payload.decode('UTF-8') == 'ON'
                     self.mqtt.publish(self._system_status_topic['learn'],
                                       'ON' if self.enocean.teach_in else 'OFF',
+                                      retain=True)
+                    self.mqtt.publish(self._bridge_info_topic(),
+                                      self._bridge_info_payload(),
                                       retain=True)
 
     #=============================================================================================

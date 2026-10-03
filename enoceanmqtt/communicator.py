@@ -6,6 +6,7 @@ import queue
 import numbers
 import json
 import platform
+import os
 
 from enocean.communicators.serialcommunicator import SerialCommunicator
 from enoceanmqtt.tcpclientcommunicator import TCPClientCommunicator
@@ -19,6 +20,8 @@ class Communicator:
     """the main working class providing the MQTT interface to the enocean packet classes"""
     mqtt = None
     enocean = None
+    BRIDGE_STATE_ONLINE = "online"
+    BRIDGE_STATE_OFFLINE = "offline"
 
     CONNECTION_RETURN_CODE = [
         "connection successful",
@@ -33,6 +36,10 @@ class Communicator:
         self.conf = config
         self.sensors = sensors
         self._index_sensors()
+        self._mqtt_connected = False
+        self._bridge_state = self.BRIDGE_STATE_OFFLINE
+        self._shutdown_requested = False
+        self.build_version = self._load_build_version()
 
         # check for mandatory configuration
         if 'mqtt_host' not in self.conf or 'enocean_port' not in self.conf:
@@ -43,6 +50,9 @@ class Communicator:
         # setup mqtt connection
         client_id = self.conf['mqtt_client_id'] if 'mqtt_client_id' in self.conf else ''
         self.mqtt = mqtt.Client(client_id=client_id)
+        self.mqtt.will_set(self._bridge_state_topic(),
+                           self._bridge_state_payload(self.BRIDGE_STATE_OFFLINE),
+                           retain=True)
         self.mqtt.on_connect = self._on_connect
         self.mqtt.on_disconnect = self._on_disconnect
         self.mqtt.on_message = self._on_mqtt_message
@@ -120,17 +130,79 @@ class Communicator:
             matched.sort(key=lambda s: self._sensor_to_index.get(id(s), 0))
         return matched
 
+    def _mqtt_base_topic(self):
+        """return the configured MQTT base topic with a trailing slash stripped"""
+        return self.conf.get('mqtt_prefix', 'enocean/').rstrip('/')
+
+    def _build_version_path(self):
+        """return the VERSION file path shipped with the package"""
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'VERSION')
+
+    def _load_build_version(self):
+        """load the build version from VERSION, defaulting to null"""
+        try:
+            with open(self._build_version_path(), 'r', encoding='utf-8') as version_file:
+                version = version_file.read().strip()
+        except OSError:
+            version = ''
+        return version or 'null'
+
+    def _bridge_state_topic(self):
+        """return the retained topic used to expose bridge availability"""
+        return f"{self._mqtt_base_topic()}/__system/state"
+
+    def _bridge_info_topic(self):
+        """return the retained topic used to expose bridge metadata"""
+        return f"{self._mqtt_base_topic()}/__system/info"
+
+    def _bridge_state_payload(self, state):
+        """build the JSON payload used for bridge availability"""
+        return json.dumps({"state": state})
+
+    def _bridge_info_payload(self):
+        """build the JSON payload used for bridge metadata"""
+        return json.dumps({
+            "version": self.build_version,
+        })
+
+    def _bridge_is_ready(self):
+        """return True when the bridge is ready to announce itself online"""
+        return self._mqtt_connected and self.enocean is not None and \
+            self.enocean.is_alive() and self.enocean_sender is not None
+
+    def _publish_bridge_state(self, state):
+        """publish the retained bridge availability state"""
+        if state == self.BRIDGE_STATE_ONLINE:
+            if self._bridge_state == self.BRIDGE_STATE_ONLINE or not self._bridge_is_ready():
+                return False
+        elif state == self.BRIDGE_STATE_OFFLINE:
+            if self.mqtt is None or not self._mqtt_connected:
+                return False
+
+        logging.debug("Publishing bridge state %s to %s", state, self._bridge_state_topic())
+        publish_info = self.mqtt.publish(self._bridge_state_topic(),
+                                         self._bridge_state_payload(state),
+                                         retain=True)
+        self._bridge_state = state
+        return publish_info
+
+    def _maybe_publish_bridge_online(self):
+        """publish bridge online once both MQTT and EnOcean are ready"""
+        return self._publish_bridge_state(self.BRIDGE_STATE_ONLINE)
+
     #=============================================================================================
     # MQTT CLIENT
     #=============================================================================================
     def _on_connect(self, mqtt_client, _userdata, _flags, return_code):
         '''callback for when the client receives a CONNACK response from the MQTT server.'''
         if return_code == 0:
+            self._mqtt_connected = True
             logging.info("Succesfully connected to MQTT broker.")
             # listen to enocean send requests
             for cur_sensor in self.sensors:
                 # logging.debug("MQTT subscribing: %s", cur_sensor['name']+'/req/#')
                 mqtt_client.subscribe(cur_sensor['name']+'/req/#')
+            self._maybe_publish_bridge_online()
         else:
             logging.error("Error connecting to MQTT broker: %s",
                           self.CONNECTION_RETURN_CODE[return_code]
@@ -138,6 +210,8 @@ class Communicator:
 
     def _on_disconnect(self, _mqtt_client, _userdata, return_code):
         '''callback for when the client disconnects from the MQTT server.'''
+        self._mqtt_connected = False
+        self._bridge_state = self.BRIDGE_STATE_OFFLINE
         if return_code == 0:
             logging.warning("Successfully disconnected from MQTT broker")
         else:
@@ -168,6 +242,26 @@ class Communicator:
     def _on_mqtt_publish(self, _mqtt_client, _userdata, _mid):
         '''the callback for when a PUBLISH message is successfully sent to the MQTT server.'''
         #logging.debug("Published MQTT message "+str(mid))
+
+
+    def shutdown(self):
+        """publish bridge offline and stop both interfaces cleanly"""
+        if self._shutdown_requested:
+            return
+        self._shutdown_requested = True
+
+        publish_info = self._publish_bridge_state(self.BRIDGE_STATE_OFFLINE)
+        if publish_info and hasattr(publish_info, 'wait_for_publish'):
+            publish_info.wait_for_publish()
+
+        if self.mqtt is not None:
+            try:
+                self.mqtt.disconnect()
+            finally:
+                self.mqtt.loop_stop()
+
+        if self.enocean is not None and self.enocean.is_alive():
+            self.enocean.stop()
 
 
     #=============================================================================================
@@ -393,11 +487,11 @@ class Communicator:
         # Publish packet data to MQTT
         value = json.dumps(mqtt_json)
         if mqtt_json not in (None, ""):
-            logging.debug("%s: Sent MQTT: %s", topic, value)
+            logging.debug("%s: Sent MQTT: %s retain=%s", topic, value, retain)
         else:
             retain = True
             value = None
-            logging.debug("Clearing retained packets")
+            logging.debug("Clearing retained packets retain=%s", retain)
 
         if mqtt_publish_json:
             self.mqtt.publish(topic, value, retain=retain)
@@ -638,35 +732,32 @@ class Communicator:
     #=============================================================================================
     def run(self):
         """the main loop with blocking enocean packet receive handler"""
-        # start endless loop for listening
-        while self.enocean.is_alive():
-            # Request transmitter ID, if needed
-            if self.enocean_sender is None:
-                self.enocean_sender = self.enocean.base_id
+        try:
+            # start endless loop for listening
+            while self.enocean.is_alive() and not self._shutdown_requested:
+                # Request transmitter ID, if needed
+                if self.enocean_sender is None:
+                    self.enocean_sender = self.enocean.base_id
 
-            # Loop to empty the queue...
-            try:
-                # get next packet
-                packet = self.enocean.receive.get(block=True, timeout=1)
+                # Loop to empty the queue...
+                try:
+                    # get next packet
+                    packet = self.enocean.receive.get(block=True, timeout=1)
 
-                # check packet type
-                if packet.packet_type == PACKET.RADIO:
-                    self._process_radio_packet(packet)
-                elif packet.packet_type == PACKET.RESPONSE:
-                    response_code = RETURN_CODE(packet.data[0])
-                    logging.info("got response packet: %s", response_code.name)
-                else:
-                    logging.info("got non-RF packet: %s", packet)
-                    continue
-            except queue.Empty:
-                continue
-            except KeyboardInterrupt:
-                logging.debug("Exception: KeyboardInterrupt")
-                break
+                    # check packet type
+                    if packet.packet_type == PACKET.RADIO:
+                        self._process_radio_packet(packet)
+                    elif packet.packet_type == PACKET.RESPONSE:
+                        response_code = RETURN_CODE(packet.data[0])
+                        logging.info("got response packet: %s", response_code.name)
+                    else:
+                        logging.info("got non-RF packet: %s", packet)
+                except queue.Empty:
+                    pass
+                except KeyboardInterrupt:
+                    logging.debug("Exception: KeyboardInterrupt")
+                    break
 
-        # Run finished, close MQTT client and stop Enocean thread
-        logging.debug("Cleaning up")
-        self.mqtt.loop_stop()
-        self.mqtt.disconnect()
-        self.mqtt.loop_forever()  # will block until disconnect complete
-        self.enocean.stop()
+                self._maybe_publish_bridge_online()
+        finally:
+            self.shutdown()
