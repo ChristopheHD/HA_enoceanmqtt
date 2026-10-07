@@ -6080,7 +6080,100 @@ becker:
           {% else %}
             OFF
           {% endif %}
-        
+
+lunos:
+  uni_eo:
+    device_config:
+    - rorg: "0xD2"
+      func: "0x50"
+      type: "0x00"
+      command: "MT"
+      channel: "MT"
+      log_learn: ""
+      direction: ""
+      answer: ""
+      teach_in_via_vld: "1"
+    entities:
+    - component: "button"
+      name: "query_basic_status"
+      config:
+        command_topic: "d2/req"
+        payload_press: >-
+          {"MT":"0","RMT":"0","send":"clear"}
+    - component: "select"
+      name: "operating_mode"
+      config:
+        options:
+        - "Off"
+        - "Level 1"
+        - "Level 2"
+        - "Level 3"
+        - "Level 4"
+        - "Level 5"
+        - "Level 6"
+        - "Level 7"
+        - "Level 8"
+        - "Automatic on demand"
+        command_topic: "d2/req"
+        command_template: >-
+          {% set modes = {"Off": "0", "Level 1": "1", "Level 2": "2", "Level 3": "3", "Level 4": "4", "Level 5": "5", "Level 6": "6", "Level 7": "7", "Level 8": "8", "Automatic on demand": "12"} %}
+          {"MT":"1","DOMC":"{{modes[value]}}","OMC":"0","HBC":"0","TOMC":"0","COT":"127","HT":"127","AQT":"127","send":"clear"}
+        state_topic: "d2/MT2"
+        value_template: >-
+          {% set modes = {0: "Off", 1: "Level 1", 2: "Level 2", 3: "Level 3", 4: "Level 4", 5: "Level 5", 6: "Level 6", 7: "Level 7", 8: "Level 8", 12: "Automatic on demand"} %}
+          {{ modes[value_json.OMS] }}
+        icon: "mdi:hvac"
+    - component: "button"
+      name: "close_bypass"
+      config:
+        command_topic: "d2/req"
+        payload_press: >-
+          {"MT":"1","DOMC":"15","OMC":"0","HBC":"1","TOMC":"0","COT":"127","HT":"127","AQT":"127","send":"clear"}
+    - component: "button"
+      name: "open_bypass"
+      config:
+        command_topic: "d2/req"
+        payload_press: >-
+          {"MT":"1","DOMC":"15","OMC":"0","HBC":"2","TOMC":"0","COT":"127","HT":"127","AQT":"127","send":"clear"}
+    - component: binary_sensor
+      name: "heat_exchanger_bypass"
+      config:
+        state_topic: "d2/MT2"
+        device_class: "opening"
+        payload_on: "on"
+        payload_off: "off"
+        value_template: >-
+          {% if value_json.HBS == 1 %}on{% else %}off{% endif %}
+    - component: "sensor"
+      name: "t_indoor"
+      config:
+        state_topic: "d2/MT2"
+        value_template: "{{ value_json.INT }}"
+        device_class: "temperature"
+        state_class: "measurement"
+        unit_of_measurement: "°C"
+    - component: "sensor"
+      name: "t_exhaust"
+      config:
+        state_topic: "d2/MT2"
+        value_template: "{{ value_json.EXHT }}"
+        device_class: "temperature"
+        state_class: "measurement"
+        unit_of_measurement: "°C"
+    - component: "sensor"
+      name: "air_quality_sensor"
+      config:
+        state_topic: "d2/MT2"
+        value_template: "{{ value_json.AQS1 }}"
+        unit_of_measurement: "%"
+    - component: binary_sensor
+      name: "filter_maintenance_required"
+      config:
+        state_topic: "d2/MT2"
+        payload_on: "on"
+        payload_off: "off"
+        value_template: >-
+          {% if value_json.FMS == 1 %}on{% else %}off{% endif %}
 
 # Below are mappings common to all EEPs
 common:

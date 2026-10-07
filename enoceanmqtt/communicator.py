@@ -592,13 +592,17 @@ class Communicator:
     def _confirm_vld_teach_in(self, packet, sensors):
         '''Answer a UTE teach-in request of a VLD device with command 0.
 
-        Some VLD devices (e.g. LUNOS UNI-EO, EEP D2-50-00) do not expect a UTE
-        response, but a VLD telegram with message type 0 as teach-in confirmation.'''
-        if packet.rorg != RORG.UTE or not getattr(self.enocean, 'teach_in', False):
+        Some devices (e.g. LUNOS UNI-EO) send UTE teach-in requests without
+        expecting a UTE response. They expect a VLD telegram with command 0 as
+        teach-in confirmation instead. This is enabled per device with the
+        'teach_in_via_vld' option.'''
+        if (packet.rorg != RORG.UTE
+                or getattr(packet, 'response_expected', True)
+                or not getattr(self.enocean, 'teach_in', False)):
             return
         for sensor in sensors:
             command_shortcut = sensor.get('command')
-            if sensor.get('rorg') == RORG.VLD and command_shortcut:
+            if str(sensor.get('teach_in_via_vld')) in ("True", "true", "1") and command_shortcut:
                 logging.info("Sending VLD teach-in confirmation to %s.",
                              enocean.utils.to_hex_string(packet.sender))
                 ack_sensor = dict(sensor)
@@ -612,8 +616,6 @@ class Communicator:
         found_sensor = False
         address = enocean.utils.combine_hex(packet.sender)
         potential_sensors = self._sensors_by_address.get(address, [])
-
-        self._confirm_vld_teach_in(packet, potential_sensors)
 
         for cur_sensor in potential_sensors:
             # Does this sensor match?
@@ -629,6 +631,9 @@ class Communicator:
         # log packet, if not disabled
         if str(self.conf.get('log_packets')) in ("True", "true", "1"):
             logging.info("received: %s", packet)
+
+        # UTE teach-in request of a VLD device that expects a VLD confirmation
+        self._confirm_vld_teach_in(packet, potential_sensors)
 
         # abort loop if sensor not found
         if not found_sensor:
