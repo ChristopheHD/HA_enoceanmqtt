@@ -5,7 +5,6 @@ import logging
 import queue
 import numbers
 import json
-import platform
 
 from enocean.communicators.serialcommunicator import SerialCommunicator
 from enoceanmqtt.tcpclientcommunicator import TCPClientCommunicator
