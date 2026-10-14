@@ -810,7 +810,7 @@ class DiscoveryAvailabilityTests(unittest.TestCase):
             )
         )
 
-    def test_bridge_info_is_republished_when_learn_changes(self):
+    def test_learn_state_is_republished_when_learn_changes(self):
         comm = self.make_ha_communicator()
         comm.enocean_sender = [0x11, 0x22, 0x33, 0x44]
         comm._on_connect(comm.mqtt, None, None, 0)
@@ -820,14 +820,20 @@ class DiscoveryAvailabilityTests(unittest.TestCase):
             payload=b'ON',
         ))
 
+        learn_publishes = [
+            item for item in comm.mqtt.published
+            if item['topic'] == 'enoceanmqtt/__system/learn'
+        ]
         bridge_info_publishes = [
             json.loads(item['payload'])
             for item in comm.mqtt.published
             if item['topic'] == 'enoceanmqtt/__system/info'
         ]
 
-        self.assertGreaterEqual(len(bridge_info_publishes), 2)
-        self.assertEqual(bridge_info_publishes[-1], {'version': 'null'})
+        self.assertGreaterEqual(len(learn_publishes), 2)
+        self.assertEqual(learn_publishes[-1]['payload'], 'ON')
+        self.assertEqual(len(bridge_info_publishes), 1)
+        self.assertEqual(bridge_info_publishes[0], {'version': 'null'})
 
     def test_ha_on_connect_publishes_bridge_state_topic(self):
         comm = self.make_ha_communicator()
