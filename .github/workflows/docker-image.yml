@@ -10,7 +10,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  BUILD_VERSION: "head"
+  BUILD_VERSION: ${{ github.head_ref || github.ref_name }}
 
 jobs:
   build-and-push-image:
@@ -57,6 +57,8 @@ jobs:
         with:
           context: .
           file: ./docker/Dockerfile
+          build-args: |
+            BUILD_VERSION=${{ env.BUILD_VERSION }}
           # Do not push when the event is a pull_request (secrets are not available for forks, and publishing from PRs is unsafe)
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}

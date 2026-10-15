@@ -8,6 +8,7 @@ import os
 import traceback
 import copy
 import argparse
+import signal
 from configparser import ConfigParser
 
 from enoceanmqtt.communicator import Communicator
@@ -123,13 +124,22 @@ def main():
         logging.info("Selected overlay : None")
         com = Communicator(conf, sensors)
 
-    # start working
+    def _handle_shutdown(_signum, _frame):
+        """forward termination signals to the shared shutdown path"""
+        logging.info("Shutdown requested")
+        com.shutdown()
+
     try:
+        signal.signal(signal.SIGINT, _handle_shutdown)
+        signal.signal(signal.SIGTERM, _handle_shutdown)
+        # start working
         com.run()
 
     # catch all possible exceptions
     except:     # pylint: disable=broad-except,bare-except
         logging.error(traceback.format_exc())
+    finally:
+        com.shutdown()
 
 
 # check for execution
