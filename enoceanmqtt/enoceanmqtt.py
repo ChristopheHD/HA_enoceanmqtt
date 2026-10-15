@@ -137,8 +137,7 @@ def main():
 
     # catch all possible exceptions
     except Exception as e:
-        logging.error("Exception in main loop: %s", e)
-        logging.error(traceback.format_exc())
+        logging.error("Exception in main loop: %s\n%s", e, traceback.format_exc())
     finally:
         com.shutdown()
 
