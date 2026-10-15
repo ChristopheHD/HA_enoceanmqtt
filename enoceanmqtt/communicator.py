@@ -383,7 +383,7 @@ class Communicator:
         # Get how to handle MQTT message
         try:
             mqtt_payload = json.loads(msg.payload)
-        except:
+        except (ValueError, TypeError):
             mqtt_payload = msg.payload
 
         if isinstance(mqtt_payload, dict):
