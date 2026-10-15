@@ -1,0 +1,36 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ include "ha-enoceanmqtt.fullname" . }}
+  labels:
+    {{- include "ha-enoceanmqtt.labels" . | nindent 4 }}
+data:
+  enoceanmqtt.conf: |-
+    ## the general section defines parameter for the mqtt broker and the enocean interface
+    [CONFIG]
+    enocean_port    = {{ .Values.enoceanmqtt.port }}
+    log_packets     = {{ .Values.enoceanmqtt.log_packets }}
+    overlay         = {{ .Values.enoceanmqtt.overlay }}
+    db_file         = /data/device_db.json
+
+    mqtt_discovery_prefix = {{ .Values.enoceanmqtt.mqtt_discovery_prefix }}
+    mqtt_host       = {{ .Values.enoceanmqtt.mqtt_host }}
+    mqtt_port       = {{ .Values.enoceanmqtt.mqtt_port | int }}
+    mqtt_client_id  = {{ .Values.enoceanmqtt.mqtt_client_id }}
+    mqtt_keepalive  = {{ .Values.enoceanmqtt.mqtt_keepalive }}
+    mqtt_prefix     = {{ .Values.enoceanmqtt.mqtt_prefix }}
+    mqtt_user       = {{ .Values.enoceanmqtt.mqtt_user }}
+    mqtt_pwd        = {{ .Values.enoceanmqtt.mqtt_pwd }}
+    mqtt_debug      = {{ .Values.enoceanmqtt.mqtt_debug }}
+    mqtt_ssl          = {{ .Values.enoceanmqtt.mqtt_ssl }}
+    mqtt_ssl_ca_certs = {{ .Values.enoceanmqtt.mqtt_ssl_ca_certs }}
+    mqtt_ssl_certfile = {{ .Values.enoceanmqtt.mqtt_ssl_certfile }}
+    mqtt_ssl_keyfile  = {{ .Values.enoceanmqtt.mqtt_ssl_keyfile }}
+    mqtt_ssl_insecure = {{ .Values.enoceanmqtt.mqtt_ssl_insecure }}
+
+    {{- range $device_name, $spec := .Values.enoceanmqtt.devices }}
+    [{{ $device_name }}]
+    {{-   range $key, $value := $spec }}
+    {{      $key }} = {{ $value }}
+    {{-   end }}
+    {{- end }}

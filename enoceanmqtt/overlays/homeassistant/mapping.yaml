@@ -1833,6 +1833,22 @@
           state_class: "measurement"
           unit_of_measurement: "°C"
       - component: "sensor"
+        name: "t_indoor"
+        config:
+          state_topic: "MT2"
+          value_template: "{{ value_json.INT }}"
+          device_class: "temperature"
+          state_class: "measurement"
+          unit_of_measurement: "°C"
+      - component: "sensor"
+        name: "t_exhaust"
+        config:
+          state_topic: "MT2"
+          value_template: "{{ value_json.EXHT }}"
+          device_class: "temperature"
+          state_class: "measurement"
+          unit_of_measurement: "°C"
+      - component: "sensor"
         name: "supply_air_flow"
         config:
           state_topic: "MT2"
@@ -5517,6 +5533,7 @@ eltako:
         state_template: >-
           {% if value_json._RAW_DATA_.split(":")[0]=="70" %}on{% elif value_json._RAW_DATA_.split(":")[0]=="50" %}off{% endif %}
   fr62: *tf61l
+  fl62: *tf61l
   fud14: &fud14
     device_config:
     - rorg: "0xA5"
@@ -6041,6 +6058,144 @@ etc-midwest:
           value_template: >-
             {% if value_json.PIRS >= 128 %}ON{% else %}OFF{% endif %}
   erm-dau-277: *erm-dau-lv
+
+becker:
+  shutter:
+    device_config:
+    - rorg: "0xD2"
+      func: "0x05"
+      type: "0x02"
+      command: "CMD"
+      channel: ""
+      log_learn: ""
+      direction: ""
+      answer: ""
+    entities:
+    - component: "cover"
+      name: "cover"
+      config:
+        command_topic: "d2/req"
+        payload_open: >-
+          {"CMD":"1","POS":"0","ANG":"127","REPO":"0","LOCK":"0","CHN":"0","send":"clear"}
+        payload_close: >-
+          {"CMD":"1","POS":"100","ANG":"127","REPO":"0","LOCK":"0","CHN":"0","send":"clear"}
+        payload_stop: >-
+          {"CMD":"2","CHN":"0","send":"clear"}
+        position_topic: "d2"
+        position_open: 0
+        position_closed: 100
+        position_template: >-
+          {% if (value_json.POS <= 100) and (value_json.POS >= 0) %}
+            {{ value_json.POS }}
+          {% endif %}
+        set_position_topic: "d2/req"
+        set_position_template: >-
+          {"CMD":"1","POS":"{{ 100 - position }}","ANG":"127","REPO":"0","LOCK":"0","CHN":"0","send":"clear"}
+    - component: "binary_sensor"
+      name: "moving"
+      config:
+        device_class: "moving"
+        state_topic: "d2"
+        value_template: >-
+          {% if value_json.POS == 127 %}
+            ON
+          {% else %}
+            OFF
+          {% endif %}
+
+lunos:
+  uni_eo:
+    device_config:
+    - rorg: "0xD2"
+      func: "0x50"
+      type: "0x00"
+      command: "MT"
+      channel: "MT"
+      log_learn: ""
+      direction: ""
+      answer: ""
+      teach_in_via_vld: "1"
+    entities:
+    - component: "button"
+      name: "query_basic_status"
+      config:
+        command_topic: "d2/req"
+        payload_press: >-
+          {"MT":"0","RMT":"0","send":"clear"}
+    - component: "select"
+      name: "operating_mode"
+      config:
+        options:
+        - "Off"
+        - "Level 1"
+        - "Level 2"
+        - "Level 3"
+        - "Level 4"
+        - "Level 5"
+        - "Level 6"
+        - "Level 7"
+        - "Level 8"
+        - "Automatic on demand"
+        command_topic: "d2/req"
+        command_template: >-
+          {% set modes = {"Off": "0", "Level 1": "1", "Level 2": "2", "Level 3": "3", "Level 4": "4", "Level 5": "5", "Level 6": "6", "Level 7": "7", "Level 8": "8", "Automatic on demand": "12"} %}
+          {"MT":"1","DOMC":"{{modes[value]}}","OMC":"0","HBC":"0","TOMC":"0","COT":"127","HT":"127","AQT":"127","send":"clear"}
+        state_topic: "d2/MT2"
+        value_template: >-
+          {% set modes = {0: "Off", 1: "Level 1", 2: "Level 2", 3: "Level 3", 4: "Level 4", 5: "Level 5", 6: "Level 6", 7: "Level 7", 8: "Level 8", 12: "Automatic on demand"} %}
+          {{ modes[value_json.OMS] }}
+        icon: "mdi:hvac"
+    - component: "button"
+      name: "close_bypass"
+      config:
+        command_topic: "d2/req"
+        payload_press: >-
+          {"MT":"1","DOMC":"15","OMC":"0","HBC":"1","TOMC":"0","COT":"127","HT":"127","AQT":"127","send":"clear"}
+    - component: "button"
+      name: "open_bypass"
+      config:
+        command_topic: "d2/req"
+        payload_press: >-
+          {"MT":"1","DOMC":"15","OMC":"0","HBC":"2","TOMC":"0","COT":"127","HT":"127","AQT":"127","send":"clear"}
+    - component: binary_sensor
+      name: "heat_exchanger_bypass"
+      config:
+        state_topic: "d2/MT2"
+        device_class: "opening"
+        payload_on: "on"
+        payload_off: "off"
+        value_template: >-
+          {% if value_json.HBS == 1 %}on{% else %}off{% endif %}
+    - component: "sensor"
+      name: "t_indoor"
+      config:
+        state_topic: "d2/MT2"
+        value_template: "{{ value_json.INT }}"
+        device_class: "temperature"
+        state_class: "measurement"
+        unit_of_measurement: "°C"
+    - component: "sensor"
+      name: "t_exhaust"
+      config:
+        state_topic: "d2/MT2"
+        value_template: "{{ value_json.EXHT }}"
+        device_class: "temperature"
+        state_class: "measurement"
+        unit_of_measurement: "°C"
+    - component: "sensor"
+      name: "air_quality_sensor"
+      config:
+        state_topic: "d2/MT2"
+        value_template: "{{ value_json.AQS1 }}"
+        unit_of_measurement: "%"
+    - component: binary_sensor
+      name: "filter_maintenance_required"
+      config:
+        state_topic: "d2/MT2"
+        payload_on: "on"
+        payload_off: "off"
+        value_template: >-
+          {% if value_json.FMS == 1 %}on{% else %}off{% endif %}
 
 # Below are mappings common to all EEPs
 common:

@@ -1,3 +1,3 @@
-setuptools
+enocean-mqtt==0.1.4
 pyyaml==6.0.2
 tinydb==4.8.2

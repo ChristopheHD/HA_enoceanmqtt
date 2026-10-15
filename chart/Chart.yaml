@@ -1,0 +1,10 @@
+apiVersion: v2
+appVersion: sha-0b0d61b
+description: Helmchart for enoceanmqtt-addon
+home: https://github.com/ChristopheHD/HA_enoceanmqtt-addon/tree/master
+icon: https://github.com/ChristopheHD/HA_enoceanmqtt-addon/raw/master/addon/logo.png
+maintainers:
+- name: turgon37
+name: ha-enoceanmqtt
+type: application
+version: 1.0.1

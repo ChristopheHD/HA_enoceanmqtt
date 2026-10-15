@@ -1,0 +1,165 @@
+image:
+  repository: ghcr.io/christophehd/ha_enoceanmqtt
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# -- Setting default strategy, to avoid running 2 containers with one stick
+strategy:
+  type: Recreate
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+# # -- add your env variables here, following standard syntax
+env: []
+#   - name: NAME
+#     value: /usr/src/app/store/.config-db
+
+# # -- you can add secrets and configmaps. this way you support external secrets for secure variables
+envFrom: []
+
+# Annotations to add to the deployment
+deploymentAnnotations: {}
+
+# Annotations to add to the pod
+podAnnotations: {}
+
+podSecurityContext:
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  # required to open device
+  runAsNonRoot: false
+
+configMount:
+  mountPath: /config/enoceanmqtt.conf
+  subPath: enoceanmqtt.conf
+  name: ha-enoceanmqtt-config
+
+extraVolumeMounts: []
+  # - name: hook-run-scripts
+  #   mountPath: /hooks
+extraVolumes:
+  # - name: hook-run-scripts
+  #   configMap:
+
+persistence:
+  # -- enable persistent volume, otherwise use empty dir
+  enabled: false
+  # existingClaim: my-claim
+  # -- change the path of store. Just in case you use different env variable.
+  mountPath: /data
+  # -- Optionally specify a subPath
+  # subPath: /path/to/config
+
+# -- Support custom usb device
+# usbDevice: /dev/ttyUSB0
+
+enoceanmqtt:
+  # enable console debugging
+  debug: false
+
+  # serial port to use
+  port: /dev/ttyUSB0
+
+  log_packets: 1
+  overlay: HA
+
+  # the discovery prefix is used by MQTT discovery in Home Assistant
+  mqtt_discovery_prefix: homeassistant/
+
+  mqtt_host:
+  mqtt_port: 1883
+  mqtt_client_id: enocean_gateway
+
+  ## setting mqtt_keepalive = 0 sets the timeout to infinitive but does not work reliably
+  ## due to an upstream issue https://github.com/eclipse/paho.mqtt.python/issues/473
+  mqtt_keepalive: 60
+
+  # the prefix is used for the mqtt value names; this is extended by the sensor name
+  mqtt_prefix: enoceanmqtt/
+
+  # Set mqtt_user and mqtt_pwd (don't use quotes).
+  mqtt_user: MQTT_USERNAME
+  mqtt_pwd: MQTT_PASSWORD
+
+  ## enable SSL on MQTT connection
+  ## Ensure that mqtt_host matches one of the hostnames contained in the broker's
+  ## certificate, otherwise the client will refuse to connect.
+  ##
+  ## mqtt_ssl_ca_certs: CA certificates to be treated as trusted. Required if
+  ##     the MQTT broker is configured with a self-signed certificate.
+  ## mqtt_ssl_certfile, mqtt_ssl_keyfile: Client certificate and private key.
+  ##     Only required if the broker requires clients to present a certificate.
+  ## mqtt_ssl_insecure: Disable verification of the broker's certificate.
+  ##     WARNING: do NOT use on production systems as this is insecure!
+  mqtt_ssl: false
+  mqtt_ssl_ca_certs: /path/CA_files_merged.pem
+  mqtt_ssl_certfile: /path/client_cert.pem
+  mqtt_ssl_keyfile: /path/client_key.pem
+  mqtt_ssl_insecure: false
+
+  ## Enable/Disable MQTT debugging. Requires --debug on the command line.
+  mqtt_debug: false
+
+  # Set device list here
+  #   devices:
+  #     button/softremote: &rockerswitch
+  #       address: '0x003DD63B'
+  #       rorg: '0xF6'
+  #       func: '0x02'
+  #       type: '0x02'
+  #       ignore: 0
+  #     button/softremote:
+  #       <<: *rockerswitch
+  #       address: '0x003DDDB51'
+  devices: {}
+
+# # -- Initial resources
+resources: {}
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# -- Define network policy targeting managed pod
+networkPolicy:
+  enabled: false
+  # -- If cilium flavor is defined, fill definition here
+  cilium:
+    egress: {}
+    # - toPorts:
+    #   - ports:
+    #     - port: "1883"
+    #       protocol: TCP
+    #     - port: "8883"
+    #       protocol: TCP
+    ingress: []
+  # -- Choose policy flavor in 'kubernetes', 'cilium'
+  flavor: kubernetes
+  # -- If kubernetes flavor is defined, fill definition here
+  ingress: []
+  egress: []
+  # - ports:
+  #   - port: 1883
+  #     protocol: TCP
+  #   - port: 8883
+  #     protocol: TCP

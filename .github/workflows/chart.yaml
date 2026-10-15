@@ -1,0 +1,45 @@
+name: Release Chart
+
+on:
+  push:
+    branches: [ "develop" ]
+  pull_request:
+    branches: [ "develop" ]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # Necessary to push to GHCR
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Chart Dependencies
+        run: helm dependency update chart/
+
+      - name: Lint Chart
+        run: helm lint chart/
+
+      - name: Package Chart
+        run: helm package chart/ --destination ./chart-packages
+
+      - name: Push Chart to GHCR
+        run: |
+          CHART_VERSION=$(grep "^version:" chart/Chart.yaml | awk '{print $2}')
+          helm push "./chart-packages/ha-enoceanmqtt-${CHART_VERSION}.tgz" oci://ghcr.io/christophehd/helm-charts

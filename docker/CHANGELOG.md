@@ -1,4 +1,142 @@
-## 0.1.37
+# ⚠️ Deprecated changelog ⚠️
+
+Release notes described here are for functionalities up to version 3.1.0. Next release notes will be available only on Github release management. For more information about versioning, please refer to file `VERSION.md`.
+
+## 3.1.0
+
+### ✨ What's New
+
+- EEP A5-07-01 can now be used as a [virtual device](https://github.com/ChristopheHD/HA_enoceanmqtt-addon/wiki/Virtual-devices) thanks to @TheFaceCo tests
+- Device Becker shutters (https://github.com/ChristopheHD/HA_enoceanmqtt/pull/50) thanks to @OlwinFroon tests
+
+### 💫 What's changed
+
+- EEP D2-06-01 : buttons are changed from event entity to device trigger (https://github.com/ChristopheHD/HA_enoceanmqtt/pull/49)
+
+### 🔧 What's Fixed
+
+- EEP D2-05-00 and D2-05-02 : remove error log when receiving unknown position or unknown tilt (https://github.com/ChristopheHD/HA_enoceanmqtt/pull/37)
+
+### 👏 New Contributors
+
+- @TheFaceCo made their first contribution
+- @OlwinFroon made their first contribution
+
+## 3.0.0
+
+### ✨ What's New
+
+- Devices Eltako FUTH65D, FUTH55D and FUTH55ED thanks to @Kuhguck
+
+### 👏 New Contributors
+
+- @Kuhguck made their first contribution
+
+## 2.0.0
+
+### ✨ What's New
+
+- MSC telegrams (Manufacturer Specific Communication) are now supported and can be added to custom mappings (https://github.com/ChristopheHD/enocean/pull/25)
+- Nodon repeater configuration ([Wiki page](https://github.com/ChristopheHD/HA_enoceanmqtt-addon/wiki/Nodon#repeater-mode)) (https://github.com/ChristopheHD/HA_enoceanmqtt-addon/discussions/78)
+
+### 🚀 What's Improved
+
+- [HA mapping yaml](https://github.com/ChristopheHD/HA_enoceanmqtt/blob/develop/enoceanmqtt/overlays/homeassistant/mapping.yaml) indentation corrected thanks to @H4rryK4ne (https://github.com/ChristopheHD/HA_enoceanmqtt/pull/31)
+
+### 🔧 What's Fixed
+
+- F6-02-01 RPS telegram decoding failure thanks to @Hugo-HoB (https://github.com/mak-gitdev/HA_enoceanmqtt/pull/173)
+- Removed false error parsing value in the logs (https://github.com/ChristopheHD/HA_enoceanmqtt-addon/issues/57)
+
+### 👏 New Contributors
+
+- @H4rryK4ne made their first contribution
+- @Hugo-HoB made their first contribution
+
+## 1.0.1
+
+### 🛑 What's Removed
+
+- Entity `cover` have been removed from EEP D2-05-xx to avoid confusion for new-comers. Only entity `cover2` is remaining. `cover2` is not a good entity name but changing it would force current users to review all their automations.
+
+## 1.0.0
+
+### 🎉 Version 1
+
+Since more than 1 year that I made this fork and tried to improve the life of HA Enocean device owners (50+ users when I write those lines), I decided that this service is stable enough to have a version 1.x release. Next releases will follow the versioning rules described in VERSION.md
+
+### ✨ What's New
+
+- Device Eltako TF100L
+- Device Eltako FLD61
+- Device Eltako FBH55ESB
+
+### 🚀 What's Improved
+
+- Better error handling at startup (https://github.com/ChristopheHD/HA_enoceanmqtt-addon/issues/68 and https://github.com/ChristopheHD/HA_enoceanmqtt-addon/issues/69)
+
+### 🔧 What's Fixed
+
+- Fixes for EEP D2-14-41 thanks to @frankrml including
+  - Removing of raw data
+  - Rounding illumination value
+  - Accelaration status is now type enum
+  - Rounding acceleration values
+  - Contact sensor is now type door
+  - Contact sensor have now a door icon
+ 
+### 🛑 What's Removed
+
+- Option to use device name in entity name have been removed
+
+### 👏 New Contributors
+
+- @frankrml made their first contribution
+  
+## 0.1.42
+
+### 🚀 What's Improved
+
+- Better serial port handling and logging to prevent or have more information on issue https://github.com/ChristopheHD/HA_enoceanmqtt-addon/issues/61
+
+### 🔧 What's Fixed
+
+- EEP D2-01-11 state fixed for DALI controllers (and other controllers based on dimming) (https://github.com/ChristopheHD/HA_enoceanmqtt/pull/19)
+- Eltako FJ62 current position fixed on reboot thanks to @jdr85 (https://github.com/ChristopheHD/HA_enoceanmqtt/pull/20)
+
+### 👏 New Contributors
+
+- @jdr85 made their first contribution
+
+## 0.1.41
+
+### ✨ What's New
+
+- Device Eltako FR62-230V thanks to @jansorg
+- Device Afriso FT thanks to @jansorg
+- EEP D2-01-11
+
+### 🚀 What's Improved
+
+- Use of Python XML library for EEP.xml file (https://github.com/ChristopheHD/HA_enoceanmqtt-addon/issues/43)
+
+## 0.1.38
+
+### ✨ What's New
+
+- Device Eltako FTTB/Piotec Tracker thanks to @Stev-G
+- Device Eltako TF61D tested by @Luxmaster
+
+### 🔧 What's Fixed
+
+- Flood detector and buttons were triggered in automation at HA startup (https://github.com/ChristopheHD/HA_enoceanmqtt-addon/issues/38)
+
+### 👏 New Contributors
+
+- @Stev-G made their first contribution
+- @Luxmaster helped testing new device
+-
+- ## 0.1.37
 
 ### What's New
 

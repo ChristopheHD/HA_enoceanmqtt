@@ -34,6 +34,14 @@ See [Docker Installation](https://github.com/ChristopheHD/HA_enoceanmqtt/wiki/Do
 
 If you are using Kubernetes, there is also a [Kubernetes template](https://github.com/ChristopheHD/HA_enoceanmqtt/wiki/Kubernetes).
 
+# Kubernetes helm
+
+Usage (via OCI Registry)
+To install the chart using the OCI artifact, run:
+
+helm install enoceanmqtt oci://ghcr.io/christophehd/helm-charts/ha-enoceanmqtt --version 1.0.0
+
+
 # Home Assistant Addon Installation
 
 HA_enoceanmqtt can also be installed as a Home Assistant addon.  
@@ -46,15 +54,17 @@ See [Home Assistant Addon Installation](https://github.com/ChristopheHD/HA_enoce
 
 # Usage
 
-Refer to [Usage](https://github.com/ChristopheHD/HA_enoceanmqtt/wiki/Usage) for more details.
+Refer to [Normal Usage](docs/usage.md) for more details.
+
+Local condensed docs are available in [`docs/README.md`](docs/README.md).
 
 # Supported Devices
 
-Refer to [Supported devices](https://github.com/ChristopheHD/HA_enoceanmqtt/wiki/Supported-devices) for a list of supported devices.
+Refer to [Supported Devices](docs/devices.md) for a list of supported devices.
 
 For devices not yet supported, only the RSSI sensor is created in Home Assistant.  
 
-**Note**: If your device is not supported yet, please feel free to ask me for adding your device through the discussion panel. Or feel free to add it to *__`mapping.yaml`__* and make a pull request (see [Contributing](https://github.com/ChristopheHD/HA_enoceanmqtt/wiki/Contributing) for more details).
+**Note**: If your device is not supported yet, please feel free to ask me to add it through the discussion panel. Or feel free to add it to *__`mapping.yaml`__* and make a pull request (see [Contributing](docs/contributing.md) for more details).
 
 # Additional Information
 
