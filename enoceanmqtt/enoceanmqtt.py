@@ -136,8 +136,8 @@ def main():
         com.run()
 
     # catch all possible exceptions
-    except:     # pylint: disable=broad-except,bare-except
-        logging.error(traceback.format_exc())
+    except Exception as e:
+        logging.error("Exception in main loop: %s\n%s", e, traceback.format_exc())
     finally:
         com.shutdown()
 
