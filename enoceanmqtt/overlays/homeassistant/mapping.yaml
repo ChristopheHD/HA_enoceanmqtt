@@ -1006,7 +1006,7 @@
           payload_off: "off"
           value_template: >-
             {% if value_json.LC == 1 %}on{% else %}off{% endif %}
-    0x11: &D20111
+    0x11:
       device_config:
         command: "CMD"
         channel: "IO/CMD"
@@ -1072,7 +1072,190 @@
           command_topic: "req"
           payload_press: >-
             {"CMD":"3","IO":"30","send":"clear"}
-    0x12: *D20111
+    0x12:
+      device_config:
+        command: "CMD"
+        channel: "IO/CMD"
+        log_learn: ""
+        direction: ""
+        answer: ""
+      entities:
+        - component: "light"
+          name: "IO0"
+          config:
+            schema: "template"
+            state_topic: "IO0/CMD4"
+            state_template: >-
+              {% if value_json.OV == 0 %}off{% else %}on{% endif %}
+            command_topic: "req"
+            command_on_template: >-
+              {"CMD":"1","DV":"0","IO":"0","OV":"100","send":"clear"}
+            command_off_template: >-
+              {"CMD":"1","DV":"0","IO":"0","OV":"0","send":"clear"}
+        - component: "light"
+          name: "IO1"
+          config:
+            schema: "template"
+            state_topic: "IO1/CMD4"
+            state_template: >-
+              {% if value_json.OV == 0 %}off{% else %}on{% endif %}
+            command_topic: "req"
+            command_on_template: >-
+              {"CMD":"1","DV":"0","IO":"1","OV":"100","send":"clear"}
+            command_off_template: >-
+              {"CMD":"1","DV":"0","IO":"1","OV":"0","send":"clear"}
+        - component: "button"
+          name: "query_status_IO0"
+          config:
+            command_topic: "req"
+            payload_press: >-
+              {"CMD":"3","IO":"0","send":"clear"}
+        - component: "button"
+          name: "query_status_IO1"
+          config:
+            command_topic: "req"
+            payload_press: >-
+              {"CMD":"3","IO":"1","send":"clear"}
+        - component: "button"
+          name: "query_status_all"
+          config:
+            command_topic: "req"
+            payload_press: >-
+              {"CMD":"3","IO":"30","send":"clear"}
+        - component: "switch"
+          name: "IO0_taught-in_devices"
+          config:
+            entity_category: "config"
+            icon: "mdi:remote"
+            command_topic: "IO0/CMD2"
+            command_template: >-
+              {% set ns = namespace() %}
+              {% for entity in device_entities(device_id(entity_id)) %}
+                {% if entity is search('IO0_local_control',ignorecase=True) %}
+                  {% if is_state(entity, "on") %}{% set ns.LC = 1 %}{% else %}{% set ns.LC = 0 %}{% endif %}
+                {% elif entity is search('IO0_user_interface_indication',ignorecase=True) %}
+                  {% if is_state(entity, "night operation") %}{% set ns.dn = 1 %}{% else %}{% set ns.dn = 0 %}{% endif %}
+                {% endif %}
+              {% endfor %}
+              {"d/e":"{{value}}","CMD":"2","LC":"{{ns.LC}}","I/O":"0","d/n":"{{ns.dn}}","DS":"XXX","send":"clear"}
+        - component: "switch"
+          name: "IO0_local_control"
+          config:
+            entity_category: "config"
+            icon: "mdi:button-pointer"
+            state_topic: "IO0/CMD4"
+            command_topic: "IO0/CMD2"
+            command_template: >-
+              {% set ns = namespace() %}
+              {% for entity in device_entities(device_id(entity_id)) %}
+                {% if entity is search('IO0_taught-in_devices',ignorecase=True) %}
+                  {% if is_state(entity, "on") %}{% set ns.de = 1 %}{% else %}{% set ns.de = 0 %}{% endif %}
+                {% elif entity is search('IO0_user_interface_indication',ignorecase=True) %}
+                  {% if is_state(entity, "night operation") %}{% set ns.dn = 1 %}{% else %}{% set ns.dn = 0 %}{% endif %}
+                {% endif %}
+              {% endfor %}
+              {"d/e":"{{ns.de}}","CMD":"2","LC":"{{value}}","I/O":"0","d/n":"{{ns.dn}}","DS":"XXX","send":"clear"}
+            payload_on: "1"
+            payload_off: "0"
+            value_template: "{{ value_json.LC }}"
+        - component: "select"
+          name: "IO0_user_interface_indication"
+          config:
+            entity_category: "config"
+            icon: "mdi:theme-light-dark"
+            options:
+              - "day operation"
+              - "night operation"
+            command_topic: "IO0/CMD2"
+            command_template: >-
+              {% set modes = {"day operation": "0", "night operation": "1"} %}
+              {% set ns = namespace() %}
+              {% for entity in device_entities(device_id(entity_id)) %}
+                {% if entity is search('IO0_taught-in_devices',ignorecase=True) %}
+                  {% if is_state(entity, "on") %}{% set ns.de = 1 %}{% else %}{% set ns.de = 0 %}{% endif %}
+                {% elif entity is search('IO0_local_control',ignorecase=True) %}
+                  {% if is_state(entity, "on") %}{% set ns.LC = 1 %}{% else %}{% set ns.LC = 0 %}{% endif %}
+                {% endif %}
+              {% endfor %}
+              {"d/e":"{{ns.de}}","CMD":"2","LC":"{{ns.LC}}"","I/O":"0","d/n":"{{modes[value]}}","DS":"XXX","send":"clear"}
+        - component: "select"
+          name: "IO_default_state"
+          config:
+            entity_category: "config"
+            icon: "mdi:power-settings"
+            options:
+              - "Off"
+              - "On"
+              - "Remember previous state"
+            command_topic: "IO0/CMD2"
+            command_template: >-
+              {% set modes = {"day operation": "0", "night operation": "1"} %}
+              {% set default_states = {"Off": "0", "On": "1", "Remember previous state": "2"}}
+              {% set ns = namespace() %}
+              {% for entity in device_entities(device_id(entity_id)) %}
+                {% if entity is search('IO0_taught-in_devices',ignorecase=True) %}
+                  {% if is_state(entity, "on") %}{% set ns.de = 1 %}{% else %}{% set ns.de = 0 %}{% endif %}
+                {% elif entity is search('IO0_local_control',ignorecase=True) %}
+                  {% if is_state(entity, "on") %}{% set ns.LC = 1 %}{% else %}{% set ns.LC = 0 %}{% endif %}
+                {% endif %}
+              {% endfor %}
+              {"d/e":"{{ns.de}}","CMD":"2","LC":"{{ns.LC}}"","I/O":"0","d/n":"{{modes[value]}}","DS":"XXX","send":"clear"}
+        - component: "switch"
+          name: "IO1_taught-in_devices"
+          config:
+            entity_category: "config"
+            icon: "mdi:remote"
+            command_topic: "IO1/CMD2"
+            command_template: >-
+              {% set ns = namespace() %}
+              {% for entity in device_entities(device_id(entity_id)) %}
+                {% if entity is search('IO1_local_control',ignorecase=True) %}
+                  {% if is_state(entity, "on") %}{% set ns.LC = 1 %}{% else %}{% set ns.LC = 0 %}{% endif %}
+                {% elif entity is search('IO1_user_interface_indication',ignorecase=True) %}
+                  {% if is_state(entity, "night operation") %}{% set ns.dn = 1 %}{% else %}{% set ns.dn = 0 %}{% endif %}
+                {% endif %}
+              {% endfor %}
+              {"d/e":"{{value}},"CMD":"2","LC":"{{ns.LC}}","I/O":"1","d/n":"{{ns.dn}}","DS":"XXX","send":"clear"}
+        - component: "switch"
+          name: "IO1_local_control"
+          config:
+            entity_category: "config"
+            icon: "mdi:button-pointer"
+            state_topic: "IO1/CMD4"
+            command_topic: "IO1/CMD2"
+            command_template:>-
+              {% set ns = namespace() %}
+              {% for entity in device_entities(device_id(entity_id)) %}
+                {% if entity is search('IO0_taught-in_devices',ignorecase=True) %}
+                  {% if is_state(entity, "on") %}{% set ns.de = 1 %}{% else %}{% set ns.de = 0 %}{% endif %}
+                {% elif entity is search('IO1_user_interface_indication',ignorecase=True) %}
+                  {% if is_state(entity, "night operation") %}{% set ns.dn = 1 %}{% else %}{% set ns.dn = 0 %}{% endif %}
+                {% endif %}
+              {% endfor %}
+              {"d/e":"{{ns.de}}","CMD":"2","LC":"{{value}}","I/O":"1","d/n":"{{ns.dn}}","DS":"XXX","send":"clear"}
+            payload_on: "1"
+            payload_off: "0"
+            value_template: "{{ value_json.LC }}"
+        - component: "select"
+          name: "IO1_user_interface_indication"
+          config:
+            entity_category: "config"
+            icon: "mdi:theme-light-dark"
+            options:
+              - "day operation"
+              - "night operation"
+            command_topic: "IO1/CMD2"
+            command_template: >-
+              {% set modes = {"day operation": "0", "night operation": "1"} %}
+              {% set ns = namespace() %}
+              {% for entity in device_entities(device_id(entity_id)) %}
+                {% if entity is search('IO1_taught-in_devices',ignorecase=True) %}
+                  {% if is_state(entity, "on") %}{% set ns.de = 1 %}{% else %}{% set ns.de = 0 %}{% endif %}
+                {% elif entity is search('IO1_local_control',ignorecase=True) %}
+                  {% if is_state(entity, "on") %}{% set ns.LC = 1 %}{% else %}{% set ns.LC = 0 %}{% endif %}
+                {% endif %}
+              {% endfor %}
+              {"d/e":"{{ns.de}}","CMD":"2","LC":"{{ns.LC}}"","I/O":"1","d/n":"{{modes[value]}}","DS":"XXX","send":"clear"}
   0x03:
     0x0A:
       device_config:
