@@ -43,6 +43,10 @@ class Communicator:
         self._gateway_info = {}
         self.build_version = self._load_build_version()
 
+        # sender will be automatically determined
+        self.enocean_sender = None
+        self.enocean = None
+
         # check for mandatory configuration
         if 'mqtt_host' not in self.conf or 'enocean_port' not in self.conf:
             raise Exception("Mandatory configuration not found: mqtt_host/enocean_port")
@@ -89,8 +93,6 @@ class Communicator:
             self.enocean = SerialCommunicator(eport)
 
         self.enocean.start()
-        # sender will be automatically determined
-        self.enocean_sender = None
 
     def __del__(self):
         if self.enocean is not None and self.enocean.is_alive():
