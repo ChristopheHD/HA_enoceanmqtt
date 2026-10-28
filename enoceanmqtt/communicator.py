@@ -81,6 +81,7 @@ class Communicator:
                       self.conf['mqtt_host'], mqtt_port, mqtt_keepalive)
         self.mqtt.connect_async(self.conf['mqtt_host'], port=mqtt_port, keepalive=mqtt_keepalive)
         self.mqtt.loop_start()
+        self._mqtt_thread = getattr(self.mqtt, "_thread", None)
 
         # setup enocean communication
         eport  = self.conf['enocean_port']
@@ -346,6 +347,10 @@ class Communicator:
     def _maybe_publish_bridge_online(self):
         """publish bridge online once both MQTT and EnOcean are ready"""
         return self._publish_bridge_state(self.BRIDGE_STATE_ONLINE)
+
+    def _mqtt_loop_is_alive(self):
+        """return whether the MQTT network loop thread is still running"""
+        return self._mqtt_thread is not None and self._mqtt_thread.is_alive()
 
     #=============================================================================================
     # MQTT CLIENT
@@ -916,7 +921,13 @@ class Communicator:
         """the main loop with blocking enocean packet receive handler"""
         try:
             # start endless loop for listening
-            while self.enocean.is_alive() and not self._shutdown_requested:
+            while not self._shutdown_requested:
+                if not self.enocean.is_alive():
+                    break
+                if not self._mqtt_loop_is_alive():
+                    logging.error("MQTT network loop thread has stopped; shutting down bridge")
+                    break
+
                 # Request transmitter ID, if needed
                 if self.enocean_sender is None:
                     self.enocean_sender = self.enocean.base_id
