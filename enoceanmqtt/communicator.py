@@ -766,8 +766,12 @@ class Communicator:
             packet = RadioPacket.create(sensor['rorg'], sensor['func'], sensor['type'],
                                         direction=direction, command=command, sender=sender,
                                         destination=destination, learn=is_learn_response|force_learn)
-        except ValueError as err:
+        except Exception as err:
             logging.error("Cannot create RF packet: %s", err)
+            return
+
+        if packet is None:
+            logging.error("Cannot create RF packet: RadioPacket.create() returned None")
             return
 
         # assemble data based on packet type (learn / data)
