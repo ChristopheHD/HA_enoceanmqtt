@@ -8,7 +8,7 @@ RUN apk add --no-cache git
 
 COPY docker/requirements.txt /build/requirements.txt
 RUN python3 -m pip install --upgrade pip setuptools wheel && \
-    pip3 install --no-cache-dir git+https://github.com/ChristopheHD/enocean.git && \
+    pip3 install --no-cache-dir git+https://github.com/ChristopheHD/enocean.git@0.63 && \
     pip3 install --no-cache-dir -r /build/requirements.txt
 COPY enoceanmqtt /usr/local/lib/python3.14/site-packages/enoceanmqtt
 RUN printf '%s\n' "$BUILD_VERSION" > /usr/local/lib/python3.14/site-packages/enoceanmqtt/VERSION
