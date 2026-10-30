@@ -21,6 +21,13 @@ def install_fake_dependencies():
             self._waited = True
             return True
 
+    class FakeMQTTThread:
+        def __init__(self):
+            self.alive = True
+
+        def is_alive(self):
+            return self.alive
+
     class FakeMQTTClient:
         instances = []
 
@@ -61,6 +68,7 @@ def install_fake_dependencies():
             self.events.append(('connect_async', host, port, keepalive))
 
         def loop_start(self):
+            self._thread = FakeMQTTThread()
             self.events.append(('loop_start',))
 
         def loop_stop(self):
@@ -316,6 +324,21 @@ class BridgeStateTests(unittest.TestCase):
         self.assertTrue(bridge_publishes[0]['retain'])
         self.assertEqual(bridge_publishes[-1]['payload'], json.dumps({'state': 'offline'}))
         self.assertTrue(bridge_publishes[-1]['retain'])
+
+    def test_run_shuts_down_when_mqtt_loop_thread_stops(self):
+        comm = self.make_communicator()
+        comm.enocean = LoopOnceEnocean()
+        comm._mqtt_thread.alive = False
+
+        with self.assertLogs(level='ERROR') as logs:
+            comm.run()
+
+        self.assertIn(
+            'MQTT network loop thread has stopped; shutting down bridge',
+            logs.output[0],
+        )
+        self.assertTrue(comm._shutdown_requested)
+        self.assertIn(('loop_stop',), comm.mqtt.events)
 
     def test_online_is_republished_after_mqtt_reconnect(self):
         comm = self.make_communicator(prefix='custom/root/')
