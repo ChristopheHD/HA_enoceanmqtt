@@ -9,6 +9,10 @@ import unittest
 def install_fake_dependencies():
     if 'paho.mqtt.client' in sys.modules:
         return
+    # The security layer of the EnOcean library is used as it is, it does not depend on the hardware
+    security = importlib.import_module('enocean.protocol.security')
+    secure_devices = importlib.import_module('enocean.protocol.secure_devices')
+    constants = importlib.import_module('enocean.protocol.constants')
 
     class FakePublishInfo:
         def __init__(self, topic, payload, retain):
@@ -223,6 +227,9 @@ def install_fake_dependencies():
         VLD = 0x07
         RPS = 0xF6
         UTE = 0xD4
+        SEC = 0x30
+        SEC_ENCAPS = 0x31
+        SEC_TI = 0x35
 
     class FakeReturnCode:
         def __init__(self, value):
@@ -236,8 +243,13 @@ def install_fake_dependencies():
             self.started = False
             self.stopped = False
             self.teach_in = True
+            self.secure_devices = None
             self.base_id = [0x01, 0x02, 0x03, 0x04]
             self.receive = types.SimpleNamespace(get=self._raise_empty)
+
+        @staticmethod
+        def encrypt(packet):
+            return packet
 
         def _raise_empty(self, *_args, **_kwargs):
             raise queue.Empty
@@ -256,11 +268,14 @@ def install_fake_dependencies():
     fake_constants.PACKET = FakePacketType
     fake_constants.RETURN_CODE = return_code
     fake_constants.RORG = FakeRorg
+    fake_constants.SECURE_STATUS = constants.SECURE_STATUS
     fake_communicators_communicator.Communicator = FakeBaseCommunicator
     fake_serialcommunicator.SerialCommunicator = FakeEnoceanThread
 
     fake_enocean.utils = fake_utils
     fake_enocean.protocol = fake_protocol
+    fake_protocol.security = security
+    fake_protocol.secure_devices = secure_devices
     fake_enocean.communicators = fake_communicators
 
     sys.modules['enocean'] = fake_enocean
@@ -268,9 +283,29 @@ def install_fake_dependencies():
     sys.modules['enocean.protocol'] = fake_protocol
     sys.modules['enocean.protocol.packet'] = fake_packet
     sys.modules['enocean.protocol.constants'] = fake_constants
+    sys.modules['enocean.protocol.security'] = security
+    sys.modules['enocean.protocol.secure_devices'] = secure_devices
     sys.modules['enocean.communicators'] = fake_communicators
     sys.modules['enocean.communicators.communicator'] = fake_communicators_communicator
     sys.modules['enocean.communicators.serialcommunicator'] = fake_serialcommunicator
+
+
+class MemorySecureStore:
+    '''Stand-in for SecureStore, keeping the security state of secure devices in memory'''
+    def __init__(self, *_args, **_kwargs):
+        self.records = {}
+
+    def states(self):
+        return {address: dict(record['state']) for address, record in self.records.items() if 'state' in record}
+
+    def sender(self, address):
+        return self.records.get(address, {}).get('sender')
+
+    def save_state(self, address, state):
+        self.records.setdefault(address, {})['state'] = dict(state)
+
+    def save_sender(self, address, sender):
+        self.records.setdefault(address, {})['sender'] = sender
 
 
 install_fake_dependencies()
