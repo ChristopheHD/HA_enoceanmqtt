@@ -16,6 +16,7 @@ from enocean.protocol.secure_devices import SecureDevices
 import enocean.utils
 import paho.mqtt.client as mqtt
 
+from enoceanmqtt import heater
 from enoceanmqtt.database import open_database
 from enoceanmqtt.secure_store import SecureStore
 
@@ -104,6 +105,8 @@ class Communicator:
         self.enocean.secure_devices = self._secure_devices
 
         self.enocean.start()
+        # last program (setpoint) sent to D2-33 heaters, by address
+        self._heater_programs = {}
 
     def _open_database(self):
         '''open the device database'''
@@ -593,6 +596,10 @@ class Communicator:
             command = sensor['data'][command_shortcut]
             logging.debug('Retrieved command id from MQTT message: %s', hex(command))
 
+        # Remember the program sent to a heater, to answer its program requests
+        if heater.is_heater(sensor) and heater.is_program(sensor.get('data', {})):
+            self._heater_programs[sensor['address']] = dict(sensor['data'])
+
         # Send the MQTT message
         self._send_packet(sensor, destination, command)
 
@@ -971,6 +978,10 @@ class Communicator:
         # interpret packet, read properties and publish to MQTT
         self._read_packet(packet, found_sensor)
 
+        # D2-33 heaters expect their messages to be answered
+        if heater.is_heater(found_sensor):
+            self._answer_heater(packet, found_sensor)
+
         # check for neccessary reply
         if str(found_sensor.get('answer')) in ("True", "true", "1"):
             self._reply_packet(packet, found_sensor)
@@ -1030,6 +1041,23 @@ class Communicator:
                                  optional=[0x03] + destination + [0xFF, 0x00])
             logging.info("sending: %s", packet)
             self.enocean.send(packet)
+
+    #=============================================================================================
+    # D2-33 HEATERS
+    #=============================================================================================
+    def _answer_heater(self, packet, sensor):
+        '''answer a message of a D2-33 heater as required by the EEP acknowledge mechanism'''
+        mid = packet.data[1] >> 4
+        req = packet.data[1] & 0x0F
+        data = heater.answer(mid, req, self._heater_programs.get(sensor['address']))
+        if data is None:
+            logging.debug("%s: no answer to heater message MID %d REQ %d", sensor['name'], mid, req)
+            return
+        logging.debug("%s: answering heater message MID %d REQ %d", sensor['name'], mid, req)
+        answer = {key: value for key, value in sensor.items()
+                  if key not in ('data', 'raw_data', 'default_data', 'learn')}
+        answer['data'] = data
+        self._send_packet(answer, packet.sender, data['MID'])
 
     #=============================================================================================
     # RUN LOOP
