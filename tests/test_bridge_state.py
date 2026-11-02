@@ -129,6 +129,14 @@ def install_fake_dependencies():
         def remove(self, *_args, **_kwargs):
             return []
 
+        def table(self, *_args, **_kwargs):
+            return FakeTinyDB()
+
+    class FakeDocument(dict):
+        def __init__(self, value, doc_id):
+            super().__init__(value)
+            self.doc_id = doc_id
+
     class FakeQuery:
         def __getattr__(self, _name):
             return self
@@ -145,7 +153,12 @@ def install_fake_dependencies():
     fake_tinydb = types.ModuleType('tinydb')
     fake_tinydb.TinyDB = FakeTinyDB
     fake_tinydb.Query = FakeQuery
+    fake_tinydb_table = types.ModuleType('tinydb.table')
+    fake_tinydb_table.Table = object
+    fake_tinydb_table.Document = FakeDocument
+    fake_tinydb.table = fake_tinydb_table
     sys.modules['tinydb'] = fake_tinydb
+    sys.modules['tinydb.table'] = fake_tinydb_table
 
     fake_enocean = types.ModuleType('enocean')
     fake_utils = types.ModuleType('enocean.utils')
