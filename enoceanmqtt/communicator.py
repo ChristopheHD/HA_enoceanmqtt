@@ -483,9 +483,9 @@ class Communicator:
                 # parse message content
                 value = None
                 try:
-                    value = int(msg.payload)
+                    value = self._parse_number(msg.payload)
                 except ValueError:
-                    logging.warning("Cannot parse int value for %s: %s", msg.topic, msg.payload)
+                    logging.warning("Cannot parse numeric value for %s: %s", msg.topic, msg.payload)
                     # Prevent storing undefined value, as it will trigger exception in EnOcean library
                     return False
                 # store received data
@@ -533,9 +533,9 @@ class Communicator:
                 # Parse message content
                 for topic in list(mqtt_json_payload):
                     try:
-                        mqtt_json_payload[topic] = int(mqtt_json_payload[topic])
+                        mqtt_json_payload[topic] = self._parse_number(mqtt_json_payload[topic])
                     except ValueError:
-                        logging.warning("Cannot parse int value for %s: %s", topic, mqtt_json_payload[topic])
+                        logging.warning("Cannot parse numeric value for %s: %s", topic, mqtt_json_payload[topic])
                         # Prevent storing undefined value, as it will trigger exception in EnOcean library
                         del mqtt_json_payload[topic]
 
@@ -556,6 +556,16 @@ class Communicator:
             break
 
         return found_topic
+
+    @staticmethod
+    def _parse_number(value):
+        '''parse a value received over MQTT: integers for raw and enum values,
+        decimals for scaled values (e.g. a temperature setpoint)'''
+        try:
+            return int(value)
+        except ValueError:
+            number = float(value)
+            return int(number) if number.is_integer() else number
 
     def _send_requested(self, sensor, clear, secure_teachin):
         '''Send what an MQTT message asked for: a secure teach-in, or the data of the sensor.'''
