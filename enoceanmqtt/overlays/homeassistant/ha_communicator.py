@@ -6,11 +6,15 @@ import copy
 import os
 import time
 import json
+import queue
+from threading import Event
+
 import yaml
 
 import enocean.utils
 from enoceanmqtt.communicator import Communicator
 from enoceanmqtt.overlays.homeassistant.device_manager import DeviceManager
+from enoceanmqtt.overlays.homeassistant.device_web import DeviceWebServer
 
 REPOSITORY_URL = 'https://github.com/ChristopheHD/HA_enoceanmqtt'
 
@@ -21,6 +25,9 @@ class HACommunicator(Communicator):
     _system_status_topic = {}
 
     def __init__(self, config, sensors):
+        self.conf = config
+        self._device_change_queue = queue.Queue()
+
         # Read mapping file
         mapping_file = config.get('mapping_file')
         if not mapping_file:
@@ -30,83 +37,15 @@ class HACommunicator(Communicator):
         logging.info("Mapping file correctly read: %s", mapping_file)
         self._normalize_discovery_mapping(self._ha_mapping)
 
-        # Get Model-based sensors
-        models = []
-        models = [item for item in sensors if item.get('model')]
-
-        # Get EEP-based sensors
-        sensors = [cur_sensor for cur_sensor in sensors if cur_sensor not in models]
-
-        # Overwrite some of the user-defined device configuration
-        # to comply with the overlay requirements
-        for cur_sensor in sensors:
-            if str(cur_sensor.get('ignore')) not in ("True", "true", "1"):
-                # Retrieve EEP-related device configuration
-                rorg  = cur_sensor['rorg']
-                func  = cur_sensor['func']
-                type_ = cur_sensor['type']
-                devcfg = {}
-                try:
-                    devcfg = copy.deepcopy(self._ha_mapping[rorg][func][type_]['device_config'])
-                except KeyError:
-                    pass
-
-                # Set EEP-related device configuration
-                # Only set fields if they have non-empty values to avoid passing empty strings
-                # to the EnOcean library which expects None for unset parameters
-                if devcfg.get('command'):
-                    cur_sensor['command'] = devcfg.get('command')
-                if devcfg.get('channel'):
-                    cur_sensor['channel'] = devcfg.get('channel')
-                if devcfg.get('log_learn'):
-                    cur_sensor['log_learn'] = devcfg.get('log_learn')
-                if devcfg.get('direction'):
-                    cur_sensor['direction'] = devcfg.get('direction')
-                if devcfg.get('answer'):
-                    cur_sensor['answer'] = devcfg.get('answer')
-                cur_sensor['persistent']   = devcfg.get('persistent', "1")
-
-                # Better to work with JSON in HA so force JSON usage
-                # Also force publish_rssi and publish_date
-                cur_sensor['publish_json'] = "1"
-                cur_sensor['publish_rssi'] = "1"
-                cur_sensor['publish_date'] = "1"
-
-        # Create sensors from models
-        for cur_model in models:
-            if str(cur_model.get('ignore')) not in ("True", "true", "1"):
-                manufacturer,model = cur_model.get('model').lower().split('/')
-                logging.debug("Found new model-based device: %s %s", manufacturer, model)
-                devcfg = {}
-                try:
-                    devcfg = copy.deepcopy(self._ha_mapping[manufacturer][model]['device_config'])
-                except KeyError:
-                    pass
-                for new_sens in devcfg:
-                    new_sens['name'] = cur_model.get('name')+'/'+new_sens.get('rorg')[2:4].lower()
-                    new_sens['address'] = cur_model.get('address')
-                    if cur_model.get('default_data'):
-                        new_sens['default_data'] = cur_model.get('default_data')
-                    if cur_model.get('sender'):
-                        new_sens['sender'] = cur_model.get('sender')
-                    if cur_model.get('ignore'):
-                        new_sens['ignore'] = cur_model.get('ignore')
-                    new_sens['manufacturer'] = manufacturer
-                    new_sens['model'] = model
-                    new_sens['rorg'] = int(new_sens['rorg'],0)
-                    new_sens['func'] = int(new_sens['func'],0)
-                    new_sens['type'] = int(new_sens['type'],0)
-                    # Better to work with JSON in HA so force JSON usage
-                    # Also force publish_rssi and publish_date
-                    new_sens['publish_json'] = "1"
-                    new_sens['publish_rssi'] = "1"
-                    new_sens['publish_date'] = "1"
-                    new_sens.setdefault('persistent', "1")
-                    sensors.append(new_sens)
-                    logging.debug("Created sensor: %s", new_sens)
-
-        # Create device manager
+        # TinyDB stores both the UI-managed configuration and discovery metadata.
         self._devmgr = DeviceManager(config)
+        self._devmgr.migrate_ini_devices(
+            sensors,
+            config.get('mqtt_prefix', 'enocean/')
+        )
+        sensors = []
+        for device in self._devmgr.get_config_devices():
+            sensors.extend(self._expand_device(device))
 
         # Retrieve MQTT discovery prefix from configuration and make sure there is a trailing '/'
         self._mqtt_discovery_prefix = config.get('mqtt_discovery_prefix', 'homeassistant/')
@@ -120,11 +59,205 @@ class HACommunicator(Communicator):
         self.enocean.teach_in = False
         logging.info("Auto Teach-in is %s", "enabled" if self.enocean.teach_in else "disabled")
 
+        self._web_server = None
+        if str(config.get('webui_enabled', 'true')).lower() not in ('false', '0', 'no'):
+            logging.warning(
+                "Device management UI has no built-in authentication; restrict network "
+                "access or place it behind an authenticated proxy"
+            )
+            self._web_server = DeviceWebServer(
+                self._devmgr,
+                self._ha_mapping,
+                self._enqueue_device_change,
+                config.get('webui_host', '0.0.0.0'),
+                int(config.get('webui_port', 8080))
+            )
+            self._web_server.start()
+
+    def _expand_device(self, device):
+        """Turn a UI/INI device definition into the sensor records used by the bridge."""
+        prefix = self.conf.get('mqtt_prefix', 'enocean/')
+        base_name = prefix + device['name']
+        sensors = []
+
+        if device.get('model'):
+            try:
+                manufacturer, model = device['model'].lower().split('/', 1)
+            except ValueError:
+                logging.warning("Ignoring invalid model reference for %s", device['name'])
+                return sensors
+            model_map = self._ha_mapping.get(manufacturer, {}).get(model, {})
+            for new_sensor in copy.deepcopy(model_map.get('device_config', [])):
+                rorg = new_sensor.get('rorg')
+                new_sensor['name'] = base_name + '/' + str(rorg)[2:4].lower()
+                new_sensor['address'] = device['address']
+                for field in ('default_data', 'sender', 'ignore', 'virtual'):
+                    if field in device:
+                        new_sensor[field] = device[field]
+                new_sensor['manufacturer'] = manufacturer
+                new_sensor['model'] = model
+                for field in ('rorg', 'func', 'type'):
+                    new_sensor[field] = self._mapping_number(new_sensor[field])
+                new_sensor['publish_json'] = '1'
+                new_sensor['publish_rssi'] = '1'
+                new_sensor['publish_date'] = '1'
+                new_sensor.setdefault('persistent', '1')
+                new_sensor['_managed_id'] = device['id']
+                sensors.append(new_sensor)
+            return sensors
+
+        new_sensor = copy.deepcopy(device)
+        new_sensor['name'] = base_name
+        new_sensor['_managed_id'] = device['id']
+        for field in ('address', 'rorg', 'func', 'type', 'sender'):
+            if field in new_sensor:
+                new_sensor[field] = self._mapping_number(new_sensor[field])
+
+        try:
+            device_map = self._ha_mapping[new_sensor['rorg']][new_sensor['func']][
+                new_sensor['type']
+            ].get('device_config', {})
+        except KeyError:
+            device_map = {}
+        for field in ('command', 'channel', 'log_learn', 'direction', 'answer'):
+            if device_map.get(field):
+                new_sensor[field] = device_map[field]
+        if str(new_sensor.get('ignore')) not in ('True', 'true', '1'):
+            new_sensor['persistent'] = device_map.get('persistent', '1')
+            new_sensor['publish_json'] = '1'
+            new_sensor['publish_rssi'] = '1'
+            new_sensor['publish_date'] = '1'
+        sensors.append(new_sensor)
+        return sensors
+
+    @staticmethod
+    def _mapping_number(value):
+        return int(value, 0) if isinstance(value, str) else int(value)
+
+    def _enqueue_device_change(self, action, device):
+        """Apply a web UI change on the bridge loop thread."""
+        completed = Event()
+        result = {}
+        self._device_change_queue.put((action, device, completed, result))
+        if not completed.wait(30):
+            raise TimeoutError("The bridge did not apply the device change in time")
+        if 'error' in result:
+            raise RuntimeError(str(result['error']))
+
+    def _process_pending_actions(self):
+        while True:
+            try:
+                action, device, completed, result = self._device_change_queue.get_nowait()
+            except queue.Empty:
+                return
+            try:
+                if action == 'add':
+                    self._add_runtime_device(device)
+                elif action == 'delete':
+                    self._remove_runtime_device(device)
+                else:
+                    raise ValueError("Unknown device action")
+            except Exception as error:
+                logging.exception("Could not apply device %s", action)
+                result['error'] = error
+            finally:
+                completed.set()
+
+    def _add_runtime_device(self, device):
+        with self._sensor_lock:
+            new_sensors = self._expand_device(device)
+            self.sensors.extend(new_sensors)
+            self._index_sensors()
+            if self._mqtt_connected:
+                for sensor in new_sensors:
+                    self.mqtt.subscribe(sensor['name'] + '/req/#')
+                    self._discover_sensor(sensor)
+
+    def _remove_runtime_device(self, device):
+        prefix = self.conf.get('mqtt_prefix', 'enocean/')
+        base_name = prefix + device['name']
+        with self._sensor_lock:
+            removed_sensors = [
+                sensor for sensor in self.sensors
+                if sensor.get('_managed_id') == device['id']
+            ]
+            if device.get('model'):
+                manufacturer, model = device['model'].lower().split('/', 1)
+                reference = manufacturer + '_' + model
+                sender = self._format_sender(device.get('sender'))
+                uid = reference + '_' + format(device['address'], '08X') + '_' + sender
+            else:
+                eep = format(
+                    (device['rorg'] << 16) + (device['func'] << 8) + device['type'],
+                    '06X'
+                )
+                sender = self._format_sender(device.get('sender'))
+                uid = eep + '_' + format(device['address'], '08X') + '_' + sender
+
+            if self._mqtt_connected:
+                discovery = self._devmgr.db_get_device_by_field('uid', uid)
+                if discovery:
+                    for config_topic in discovery.get('cfgtopics', []):
+                        self.mqtt.publish(
+                            self._mqtt_discovery_prefix + config_topic,
+                            '',
+                            retain=True
+                        )
+                for sensor in removed_sensors:
+                    self.mqtt.unsubscribe(sensor['name'] + '/req/#')
+                    self.mqtt.unsubscribe(sensor['name'] + '/__system/#')
+                if discovery:
+                    self._devmgr.db_remove_device_by_field('uid', uid)
+                else:
+                    self._devmgr.db_remove_device_by_field('name', base_name)
+
+            self.sensors = [
+                sensor for sensor in self.sensors
+                if sensor.get('_managed_id') != device['id']
+            ]
+            self._index_sensors()
+
+    @staticmethod
+    def _format_sender(sender):
+        try:
+            return format(int(sender), '08X')
+        except (TypeError, ValueError):
+            return 'NONE'
+
+    def _discover_sensor(self, sensor):
+        if sensor.get('model'):
+            sender = self._format_sender(sensor.get('sender'))
+            uid = (
+                sensor['manufacturer'] + '_' + sensor['model'] + '_'
+                + format(sensor['address'], '08X') + '_' + sender
+            )
+            device = self._devmgr.db_get_device_by_field('uid', uid)
+            previous_topics = device.get('cfgtopics', []) if device else []
+            self._mqtt_discovery_model(sensor, previous_topics)
+        else:
+            sender = self._format_sender(sensor.get('sender'))
+            eep = format(
+                (sensor['rorg'] << 16) + (sensor['func'] << 8) + sensor['type'],
+                '06X'
+            )
+            uid = eep + '_' + format(sensor['address'], '08X') + '_' + sender
+            device = self._devmgr.db_get_device_by_field('uid', uid)
+            previous_topics = device.get('cfgtopics', []) if device else []
+            self._mqtt_discovery_eep(sensor, previous_topics)
+
+    def shutdown(self):
+        if self._web_server is not None:
+            self._web_server.stop()
+        super().shutdown()
 
     #=============================================================================================
     # MQTT CLIENT
     #=============================================================================================
     def _on_connect(self, mqtt_client, _userdata, _flags, return_code):
+        with self._sensor_lock:
+            self._handle_connection(mqtt_client, _userdata, _flags, return_code)
+
+    def _handle_connection(self, mqtt_client, _userdata, _flags, return_code):
         '''callback for when the client receives a CONNACK response from the MQTT server.'''
         if return_code == 0:
             self._mqtt_connected = True

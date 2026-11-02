@@ -3,6 +3,10 @@
 enocean_port    = /dev/enocean
 log_packets     = 1
 overlay         = HA
+db_file         = /config/device_db.json
+webui_enabled   = true
+webui_host      = 0.0.0.0
+webui_port      = 8080
 #mapping_file    = /config/mapping.yaml   # Uncomment if you want to use a custom mapping.yaml file
 #db_file         = /config/devices.db  # Uncomment if you want to specify another location for the device database
 

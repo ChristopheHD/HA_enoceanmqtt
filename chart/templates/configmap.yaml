@@ -12,6 +12,9 @@ data:
     log_packets     = {{ .Values.enoceanmqtt.log_packets }}
     overlay         = {{ .Values.enoceanmqtt.overlay }}
     db_file         = /data/device_db.json
+    webui_enabled   = {{ .Values.webui.enabled }}
+    webui_host      = {{ .Values.webui.host }}
+    webui_port      = {{ .Values.webui.port }}
 
     mqtt_discovery_prefix = {{ .Values.enoceanmqtt.mqtt_discovery_prefix }}
     mqtt_host       = {{ .Values.enoceanmqtt.mqtt_host }}

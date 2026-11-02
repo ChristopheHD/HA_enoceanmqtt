@@ -7,6 +7,7 @@ import numbers
 import json
 import os
 import time
+from threading import RLock
 
 from enocean.communicators.serialcommunicator import SerialCommunicator
 from enoceanmqtt.tcpclientcommunicator import TCPClientCommunicator
@@ -35,6 +36,7 @@ class Communicator:
     def __init__(self, config, sensors):
         self.conf = config
         self.sensors = sensors
+        self._sensor_lock = RLock()
         self._index_sensors()
         self._mqtt_connected = False
         self._bridge_state = self.BRIDGE_STATE_OFFLINE
@@ -101,39 +103,41 @@ class Communicator:
 
     def _index_sensors(self):
         """index sensors by address and name for faster lookup"""
-        self._sensors_by_address = {}
-        self._sensors_by_name = {}
-        self._sensor_to_index = {id(s): i for i, s in enumerate(self.sensors)}
-        for sensor in self.sensors:
-            addr = sensor.get('address')
-            if addr is not None:
-                if addr not in self._sensors_by_address:
-                    self._sensors_by_address[addr] = []
-                self._sensors_by_address[addr].append(sensor)
+        with self._sensor_lock:
+            self._sensors_by_address = {}
+            self._sensors_by_name = {}
+            self._sensor_to_index = {id(s): i for i, s in enumerate(self.sensors)}
+            for sensor in self.sensors:
+                addr = sensor.get('address')
+                if addr is not None:
+                    if addr not in self._sensors_by_address:
+                        self._sensors_by_address[addr] = []
+                    self._sensors_by_address[addr].append(sensor)
 
-            name = sensor.get('name')
-            if name:
-                if name not in self._sensors_by_name:
-                    self._sensors_by_name[name] = []
-                self._sensors_by_name[name].append(sensor)
+                name = sensor.get('name')
+                if name:
+                    if name not in self._sensors_by_name:
+                        self._sensors_by_name[name] = []
+                    self._sensors_by_name[name].append(sensor)
 
     def _get_sensors_for_topic(self, topic):
         """return list of sensors that match the given topic"""
-        matched = []
-        parts = topic.split('/')
-        current = ""
-        for i, part in enumerate(parts):
-            if i > 0:
-                current += "/"
-            current += part
-            if current in self._sensors_by_name:
-                # Check if it matches name + "/" as in original code
-                if topic.startswith(current + "/"):
-                    matched.extend(self._sensors_by_name[current])
-        # Sort matched sensors by their original order to maintain behavior
-        if len(matched) > 1:
-            matched.sort(key=lambda s: self._sensor_to_index.get(id(s), 0))
-        return matched
+        with self._sensor_lock:
+            matched = []
+            parts = topic.split('/')
+            current = ""
+            for i, part in enumerate(parts):
+                if i > 0:
+                    current += "/"
+                current += part
+                if current in self._sensors_by_name:
+                    # Check if it matches name + "/" as in original code
+                    if topic.startswith(current + "/"):
+                        matched.extend(self._sensors_by_name[current])
+            # Sort matched sensors by their original order to maintain behavior
+            if len(matched) > 1:
+                matched.sort(key=lambda s: self._sensor_to_index.get(id(s), 0))
+            return matched
 
     def _mqtt_base_topic(self):
         """return the configured MQTT base topic with a trailing slash stripped"""
@@ -921,6 +925,9 @@ class Communicator:
     #=============================================================================================
     # RUN LOOP
     #=============================================================================================
+    def _process_pending_actions(self):
+        """Hook for overlays that process actions from other threads."""
+
     def run(self):
         """the main loop with blocking enocean packet receive handler"""
         try:
@@ -956,6 +963,7 @@ class Communicator:
                     logging.debug("Exception: KeyboardInterrupt")
                     break
 
+                self._process_pending_actions()
                 self._maybe_publish_bridge_online()
         finally:
             self.shutdown()
