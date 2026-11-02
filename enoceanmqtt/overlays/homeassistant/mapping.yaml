@@ -6171,10 +6171,69 @@ lunos:
       name: "filter_maintenance_required"
       config:
         state_topic: "d2/MT2"
-        payload_on: "on"
-        payload_off: "off"
-        value_template: >-
-          {% if value_json.FMS == 1 %}on{% else %}off{% endif %}
+        value_template: "{{ 'ON' if value_json.FMS | int == 1 else 'OFF' }}"
+        payload_on: "ON"
+        payload_off: "OFF"
+        device_class: "problem"
+        icon: "mdi:air-filter"
+    - component: "binary_sensor"
+      name: "defrost_mode"
+      config:
+        state_topic: "d2/MT2"
+        value_template: "{{ 'ON' if value_json.DMS | int == 1 else 'OFF' }}"
+        payload_on: "ON"
+        payload_off: "OFF"
+        icon: "mdi:snowflake-melt"
+    - component: "binary_sensor"
+      name: "cooling_protection"
+      config:
+        state_topic: "d2/MT2"
+        value_template: "{{ 'ON' if value_json.CPS | int == 1 else 'OFF' }}"
+        payload_on: "ON"
+        payload_off: "OFF"
+        icon: "mdi:shield-snowflake"
+    - component: "binary_sensor"
+      name: "drain_heater"
+      config:
+        state_topic: "d2/MT2"
+        value_template: "{{ 'ON' if value_json.DHS | int == 1 else 'OFF' }}"
+        payload_on: "ON"
+        payload_off: "OFF"
+        icon: "mdi:heating-coil"
+    - component: "binary_sensor"
+      name: "timer_operation"
+      config:
+        state_topic: "d2/MT2"
+        value_template: "{{ 'ON' if value_json.TOMS | int == 1 else 'OFF' }}"
+        payload_on: "ON"
+        payload_off: "OFF"
+        icon: "mdi:timer-outline"
+    - component: "sensor"
+      name: "operation_hours"
+      config:
+        state_topic: "d2/MT3"
+        value_template: "{{ value_json.OHC }}"
+        unit_of_measurement: "h"
+        device_class: "duration"
+        icon: "mdi:counter"
+    - component: "sensor"
+      name: "software_version"
+      config:
+        state_topic: "d2/MT3"
+        value_template: "{{ value_json.SVI }}"
+        icon: "mdi:information-outline"
+    - component: "sensor"
+      name: "info_message_status"
+      config:
+        state_topic: "d2/MT3"
+        value_template: "{{ value_json.IMS | int }}"
+        icon: "mdi:information-outline"
+    - component: "sensor"
+      name: "fault_status"
+      config:
+        state_topic: "d2/MT3"
+        value_template: "{{ value_json.FS | int }}"
+        icon: "mdi:alert-circle-outline"
 
 # Below are mappings common to all EEPs
 common:
