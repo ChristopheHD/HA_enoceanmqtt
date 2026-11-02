@@ -111,6 +111,29 @@ without it the devices have to be paired again.
 
 Pre-shared key (PSK) teach-ins and SEC (`0x30`) telegrams of PTM switches are not supported.
 
+## D2-33-00 heaters
+
+Heaters using EEP `D2-33-00` (e.g. ADEO / EQUATION heaters) are exposed as a Home Assistant climate entity,
+with temperature, heating, window, presence, derogation and energy entities.
+
+- the setpoint is sent as a permanent program. The heater does not report it: the setpoint command is
+  retained on MQTT so that Home Assistant reads it back and `enoceanmqtt` sends it again when restarted;
+- the messages of the heater are acknowledged, and its time and program requests answered,
+  as required by the EEP;
+- these heaters communicate securely (see [Secure devices](#secure-devices)): to pair one,
+  put it into pairing mode from its control panel, then press its `secure_teachin` button within a minute.
+  As done by their gateway, the secure teach-in is sent in 3 telegrams;
+
+For example, an EQUATION Sorali heater:
+
+```ini
+[living_room/heater]
+address = 0x058EDA56
+rorg = 0xD2
+func = 0x33
+type = 0x00
+```
+
 ## Eltako FAM14
 
 For some Eltako devices, virtual buttons can be used to work around the limits of direct pairing.

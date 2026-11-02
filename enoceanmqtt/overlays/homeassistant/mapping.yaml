@@ -1773,6 +1773,132 @@
             {% elif value_json.CO == 1 %} OFF
             {% endif %}
           icon: "mdi:door"
+  0x33:
+    0x00:
+      device_config:
+        command: "MID"
+        channel: "MID"
+        log_learn: ""
+        direction: ""
+        answer: ""
+        # secure teach-in in 3 telegrams, as sent by the gateway of these heaters
+        secure_teachin_telegrams: 3
+      entities:
+      - component: "climate"
+        name: "heater"
+        config:
+          modes:
+          - "heat"
+          mode_state_topic: "MID8"
+          mode_state_template: "heat"
+          action_topic: "MID8"
+          action_template: >-
+            {% if value_json.HTF == 1 %}heating{% else %}idle{% endif %}
+          current_temperature_topic: "MID8"
+          current_temperature_template: "{{ value_json.INT | round(1) }}"
+          # The heater does not report its setpoint: Home Assistant keeps it (optimistic mode),
+          # and the setpoint command is retained so that Home Assistant reads it back and
+          # enoceanmqtt sends it again when restarted.
+          # A permanent setpoint is a one time program starting and ending on Monday 00:00.
+          temperature_command_topic: "req"
+          temperature_command_template: >-
+            {"MID":"2","TPT":"0","ETD":"0","ETM":"0","ETH":"0","STD":"0","STM":"0","STH":"0","TSP":"{{ value }}","CSC":"0","send":"clear"}
+          temperature_state_topic: "req"
+          temperature_state_template: "{{ value_json.TSP | default('') }}"
+          optimistic: true
+          retain: true
+          temperature_unit: "C"
+          min_temp: 7
+          max_temp: 30
+          temp_step: 0.5
+          precision: 0.1
+      - component: "sensor"
+        name: "temperature"
+        config:
+          state_topic: "MID8"
+          value_template: "{{ value_json.INT | round(1) }}"
+          device_class: "temperature"
+          state_class: "measurement"
+          unit_of_measurement: "°C"
+      - component: "binary_sensor"
+        name: "heating"
+        config:
+          state_topic: "MID8"
+          payload_on: "on"
+          payload_off: "off"
+          value_template: >-
+            {% if value_json.HTF == 1 %}on{% else %}off{% endif %}
+          device_class: "heat"
+      - component: "binary_sensor"
+        name: "window"
+        config:
+          state_topic: "MID8"
+          payload_on: "on"
+          payload_off: "off"
+          value_template: >-
+            {% if value_json.WOF == 2 %}on{% else %}off{% endif %}
+          device_class: "window"
+      - component: "binary_sensor"
+        name: "presence"
+        config:
+          state_topic: "MID8"
+          payload_on: "on"
+          payload_off: "off"
+          value_template: >-
+            {% if value_json.PIF == 2 %}on{% else %}off{% endif %}
+          device_class: "motion"
+      - component: "binary_sensor"
+        name: "derogation"
+        config:
+          state_topic: "MID8"
+          payload_on: "on"
+          payload_off: "off"
+          value_template: >-
+            {% if value_json.DGF == 1 %}on{% else %}off{% endif %}
+          icon: "mdi:hand-back-right"
+      - component: "sensor"
+        name: "error"
+        config:
+          state_topic: "MID8"
+          # ERF is a set of error flags, 0 when there is no error
+          value_template: >-
+            {% set flags = value_json.ERF | int(0) %}{% set names = ["Temperature sensor open", "Temperature sensor short circuit", "Temperature above 50°C", "Internal and external temperatures differ by more than 4°C"] %}{% set ns = namespace(errors=[]) %}{% for bit in range(4) %}{% if (flags // 2 ** bit) % 2 == 1 %}{% set ns.errors = ns.errors + [names[bit]] %}{% endif %}{% endfor %}{% if flags == 0 %}OK{% elif ns.errors %}{{ ns.errors | join(", ") }}{% else %}Error {{ flags }}{% endif %}
+          entity_category: "diagnostic"
+      - component: "sensor"
+        name: "energy"
+        config:
+          state_topic: "MID9"
+          value_template: "{{ value_json.EM | round(1) }}"
+          device_class: "energy"
+          state_class: "total_increasing"
+          unit_of_measurement: "kWh"
+      - component: "sensor"
+        name: "derogation_setpoint"
+        config:
+          state_topic: "MID9"
+          value_template: "{{ value_json.DTS | round(1) }}"
+          device_class: "temperature"
+          unit_of_measurement: "°C"
+      - component: "sensor"
+        name: "firmware_version"
+        config:
+          state_topic: "MID9"
+          value_template: "{{ value_json.FWV }}"
+          entity_category: "diagnostic"
+      - component: "button"
+        name: "request_status"
+        config:
+          command_topic: "req"
+          payload_press: >-
+            {"MID":"0","REQ":"8","send":"clear"}
+          entity_category: "diagnostic"
+      - component: "button"
+        name: "secure_teachin"
+        config:
+          command_topic: "req/send"
+          payload_press: "secure_teachin"
+          icon: "mdi:key-link"
+          entity_category: "config"
   0x50:
     0x00:
       device_config:
