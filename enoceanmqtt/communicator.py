@@ -11,9 +11,14 @@ import time
 from enocean.communicators.serialcommunicator import SerialCommunicator
 from enoceanmqtt.tcpclientcommunicator import TCPClientCommunicator
 from enocean.protocol.packet import RadioPacket, Packet
-from enocean.protocol.constants import PACKET, RETURN_CODE, RORG
+from enocean.protocol.constants import PACKET, RETURN_CODE, RORG, SECURE_STATUS
+from enocean.protocol.secure_devices import SecureDevices
 import enocean.utils
 import paho.mqtt.client as mqtt
+
+from enoceanmqtt import heater
+from enoceanmqtt.database import open_database
+from enoceanmqtt.secure_store import SecureStore
 
 
 class Communicator:
@@ -93,7 +98,20 @@ class Communicator:
             logging.info("connecting Serial to %s", eport)
             self.enocean = SerialCommunicator(eport)
 
+        # security state (keys and rolling codes) of secure devices, kept in the device database.
+        # The EnOcean library decrypts and encrypts their telegrams with it.
+        self._secure_store = SecureStore(self._open_database())
+        self._secure_devices = SecureDevices(self._secure_store.states(), on_change=self._secure_store.save_state)
+        self.enocean.secure_devices = self._secure_devices
+
         self.enocean.start()
+        # last program (setpoint) sent to D2-33 heaters, by address
+        self._heater_programs = {}
+
+    def _open_database(self):
+        '''open the device database'''
+        db_file = self.conf.get('db_file') or os.path.join(os.path.dirname(os.path.abspath(__file__)), 'device_db.json')
+        return open_database(db_file)
 
     def __del__(self):
         if self.enocean is not None and self.enocean.is_alive():
@@ -443,6 +461,7 @@ class Communicator:
                 # MQTT payload is binary data, thus we need to decode it
                 clear = False
                 raw_data = False
+                secure_teachin = False
                 for action in msg.payload.decode('UTF-8').lower().split('+'):
                     if action == "clear":
                         clear = True
@@ -450,12 +469,14 @@ class Communicator:
                         cur_sensor['learn'] = True
                     elif action == "raw_data":
                         raw_data = True
+                    elif action == "secure_teachin":
+                        secure_teachin = True
 
                 # raw_data has not been validated by the send payload
                 if 'raw_data' in cur_sensor and not raw_data:
                     del cur_sensor['raw_data']
 
-                self._send_message(cur_sensor, clear)
+                self._send_requested(cur_sensor, clear, secure_teachin)
 
             elif prop == "raw_data":
                 found_topic = True
@@ -465,9 +486,9 @@ class Communicator:
                 # parse message content
                 value = None
                 try:
-                    value = int(msg.payload)
+                    value = self._parse_number(msg.payload)
                 except ValueError:
-                    logging.warning("Cannot parse int value for %s: %s", msg.topic, msg.payload)
+                    logging.warning("Cannot parse numeric value for %s: %s", msg.topic, msg.payload)
                     # Prevent storing undefined value, as it will trigger exception in EnOcean library
                     return False
                 # store received data
@@ -489,6 +510,7 @@ class Communicator:
                 found_topic = True
                 send = False
                 clear = False
+                secure_teachin = False
 
                 # do we face a send request?
                 if "send" in mqtt_json_payload.keys():
@@ -505,6 +527,8 @@ class Communicator:
                             if 'raw_data' in mqtt_json_payload:
                                 cur_sensor['raw_data'] = mqtt_json_payload['raw_data']
                                 del mqtt_json_payload['raw_data']
+                        elif action == "secure_teachin":
+                            secure_teachin = True
 
                     # Remove 'send' field as it is not part of EnOcean data
                     del mqtt_json_payload['send']
@@ -512,9 +536,9 @@ class Communicator:
                 # Parse message content
                 for topic in list(mqtt_json_payload):
                     try:
-                        mqtt_json_payload[topic] = int(mqtt_json_payload[topic])
+                        mqtt_json_payload[topic] = self._parse_number(mqtt_json_payload[topic])
                     except ValueError:
-                        logging.warning("Cannot parse int value for %s: %s", topic, mqtt_json_payload[topic])
+                        logging.warning("Cannot parse numeric value for %s: %s", topic, mqtt_json_payload[topic])
                         # Prevent storing undefined value, as it will trigger exception in EnOcean library
                         del mqtt_json_payload[topic]
 
@@ -529,18 +553,34 @@ class Communicator:
 
                 # Finally, send the message
                 if send == True:
-                    self._send_message(cur_sensor, clear)
+                    self._send_requested(cur_sensor, clear, secure_teachin)
 
             # The targeted sensor has been found and the MQTT message has been handled
             break
 
         return found_topic
 
+    @staticmethod
+    def _parse_number(value):
+        '''parse a value received over MQTT: integers for raw and enum values,
+        decimals for scaled values (e.g. a temperature setpoint)'''
+        try:
+            return int(value)
+        except ValueError:
+            number = float(value)
+            return int(number) if number.is_integer() else number
+
+    def _send_requested(self, sensor, clear, secure_teachin):
+        '''Send what an MQTT message asked for: a secure teach-in, or the data of the sensor.'''
+        if secure_teachin:
+            self._send_secure_teach_in(sensor)
+        else:
+            self._send_message(sensor, clear)
+
     def _send_message(self, sensor, clear):
         '''Send received MQTT message (Property-based) to EnOcean.'''
         logging.debug("Trigger message to: %s", sensor['name'])
-        destination = [(sensor['address'] >> i*8) &
-                       0xff for i in reversed(range(4))]
+        destination = self._address_bytes(sensor['address'])
 
         # Retrieve command from MQTT message and pass it to _send_packet()
         command = None
@@ -555,6 +595,10 @@ class Communicator:
             # Retrieve command id from MQTT message
             command = sensor['data'][command_shortcut]
             logging.debug('Retrieved command id from MQTT message: %s', hex(command))
+
+        # Remember the program sent to a heater, to answer its program requests
+        if heater.is_heater(sensor) and heater.is_program(sensor.get('data', {})):
+            self._heater_programs[sensor['address']] = dict(sensor['data'])
 
         # Send the MQTT message
         self._send_packet(sensor, destination, command)
@@ -753,13 +797,7 @@ class Communicator:
         # is this a response to a learn packet?
         is_learn_response = learn_data is not None
 
-        # Add possibility for the user to indicate a specific sender address
-        # in sensor configuration using added 'sender' field.
-        # So use specified sender address if any
-        if 'sender' in sensor:
-            sender = [(sensor['sender'] >> i*8) & 0xff for i in reversed(range(4))]
-        else:
-            sender = self.enocean_sender
+        sender = self._get_sender(sensor)
 
         # Check whether the learn bit should be set in the packet (only valid for RORG.BS1 and RORG.BS4)
         force_learn = False
@@ -849,6 +887,29 @@ class Communicator:
         logging.info("sending: %s", packet)
         self.enocean.send(packet)
 
+    @staticmethod
+    def _address_bytes(address):
+        '''address as a list of 4 bytes'''
+        return [(address >> i*8) & 0xff for i in reversed(range(4))]
+
+    def _get_sender(self, sensor):
+        '''sender address to use for a sensor'''
+        # Add possibility for the user to indicate a specific sender address
+        # in sensor configuration using added 'sender' field.
+        # So use specified sender address if any
+        if 'sender' in sensor:
+            return self._address_bytes(sensor['sender'])
+        # secure devices only communicate with the address they were paired from
+        paired_sender = self._secure_store.sender(sensor['address'])
+        if paired_sender is not None:
+            return self._address_bytes(paired_sender)
+        return self.enocean_sender
+
+    def _chip_id(self):
+        '''Chip ID of the transceiver, read at startup, as 4 bytes. None if unknown.'''
+        chip_id = (self._gateway_info or {}).get('esp3', {}).get('chipId')
+        return list(bytes.fromhex(chip_id)) if chip_id else None
+
     def _confirm_vld_teach_in(self, packet, sensors):
         '''Answer a UTE teach-in request of a VLD device with command 0.
 
@@ -872,6 +933,10 @@ class Communicator:
                 return
 
     def _process_radio_packet(self, packet):
+        # secure telegrams are delivered decrypted by the EnOcean library, the others are only logged
+        if not self._check_secure_status(packet):
+            return
+
         # first, look whether we have this sensor configured
         found_sensor = False
         address = enocean.utils.combine_hex(packet.sender)
@@ -913,10 +978,86 @@ class Communicator:
         # interpret packet, read properties and publish to MQTT
         self._read_packet(packet, found_sensor)
 
+        # D2-33 heaters expect their messages to be answered
+        if heater.is_heater(found_sensor):
+            self._answer_heater(packet, found_sensor)
+
         # check for neccessary reply
         if str(found_sensor.get('answer')) in ("True", "true", "1"):
             self._reply_packet(packet, found_sensor)
 
+
+    #=============================================================================================
+    # SECURE DEVICES
+    #=============================================================================================
+    def _check_secure_status(self, packet):
+        '''log what happened to a received secure telegram, return whether it is to be processed'''
+        status = getattr(packet, 'secure_status', None)
+        if status is None or status == SECURE_STATUS.DECRYPTED:
+            return True
+        sensors = self._sensors_by_address.get(enocean.utils.combine_hex(packet.sender), [])
+        name = sensors[0]['name'] if sensors else enocean.utils.to_hex_string(packet.sender)
+        if status == SECURE_STATUS.UNKNOWN_KEY:
+            if any(sensor.get('rorg') != packet.rorg for sensor in sensors):
+                logging.warning("%s: secure telegram received but no key is known, pair the device", name)
+            # delivered as it is, e.g. to a device declared with rorg = 0x31
+            return True
+        if status == SECURE_STATUS.REJECTED:
+            logging.warning("%s: secure telegram rejected (wrong key, rolling code out of window or replay)", name)
+        elif status == SECURE_STATUS.UNSUPPORTED:
+            logging.warning("%s: secure telegram not supported (R-ORG %s)", name, hex(packet.rorg))
+        elif status == SECURE_STATUS.KEY_LEARNED:
+            logging.info("%s: paired from its secure teach-in", name)
+        elif not getattr(self.enocean, 'teach_in', False):
+            logging.info("%s: ignoring secure teach-in as teach-in is disabled", name)
+        return False
+
+    def _send_secure_teach_in(self, sensor):
+        '''pair a device by sending it a secure teach-in (SEC_TI) with our key and rolling code.
+        A new key is generated on each teach-in. The number of telegrams depends on the device (EEP mapping).'''
+        try:
+            telegrams = self._secure_devices.build_teach_in(
+                sensor['address'], telegrams=sensor.get('secure_teachin_telegrams', 2),
+                bidirectional=str(sensor.get('secure_teachin_bidirectional')) in ("True", "true", "1"))
+        except ValueError as err:
+            logging.error("%s: cannot create secure teach-in: %s", sensor['name'], err)
+            return
+
+        sender = self._get_sender(sensor)
+        if 'sender' not in sensor and self._secure_store.sender(sensor['address']) is None:
+            # Secure devices such as D2-33 heaters only communicate with a gateway that paired them
+            # from its Chip ID, not from an address of its Base ID range
+            chip_id = self._chip_id()
+            if chip_id is not None:
+                sender = chip_id
+            else:
+                logging.warning("%s: Chip ID of the transceiver unknown, pairing from its Base ID", sensor['name'])
+        self._secure_store.save_sender(sensor['address'], enocean.utils.combine_hex(sender))
+        # The teach-in is addressed to the device, as done by gateways pairing D2-33 heaters
+        # ("the gateway sends unicast pairing message to the device with known unique ID")
+        destination = self._address_bytes(sensor['address'])
+        for data in telegrams:
+            packet = RadioPacket(PACKET.RADIO, data=[RORG.SEC_TI] + list(data) + sender + [0],
+                                 optional=[0x03] + destination + [0xFF, 0x00])
+            logging.info("sending: %s", packet)
+            self.enocean.send(packet)
+
+    #=============================================================================================
+    # D2-33 HEATERS
+    #=============================================================================================
+    def _answer_heater(self, packet, sensor):
+        '''answer a message of a D2-33 heater as required by the EEP acknowledge mechanism'''
+        mid = packet.data[1] >> 4
+        req = packet.data[1] & 0x0F
+        data = heater.answer(mid, req, self._heater_programs.get(sensor['address']))
+        if data is None:
+            logging.debug("%s: no answer to heater message MID %d REQ %d", sensor['name'], mid, req)
+            return
+        logging.debug("%s: answering heater message MID %d REQ %d", sensor['name'], mid, req)
+        answer = {key: value for key, value in sensor.items()
+                  if key not in ('data', 'raw_data', 'default_data', 'learn')}
+        answer['data'] = data
+        self._send_packet(answer, packet.sender, data['MID'])
 
     #=============================================================================================
     # RUN LOOP

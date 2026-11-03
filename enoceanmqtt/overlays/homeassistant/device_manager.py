@@ -3,7 +3,9 @@
 
 import logging
 import os
-from tinydb import TinyDB, Query
+from tinydb import Query
+
+from enoceanmqtt.database import open_database
 
 class DeviceManager():
     '''Device Manager class, providing database methods'''
@@ -14,9 +16,14 @@ class DeviceManager():
         db_file = config.get('db_file')
         if not db_file:
             db_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'device_db.json')
-        self._db = TinyDB(db_file, indent=4)
+        self._db = open_database(db_file)
         self.db_add_uid()
         logging.info("Device database %s correctly read/created", db_file)
+
+    @property
+    def database(self):
+        '''the device database'''
+        return self._db
 
     def db_add_uid(self):
         '''Update old databases without UID'''

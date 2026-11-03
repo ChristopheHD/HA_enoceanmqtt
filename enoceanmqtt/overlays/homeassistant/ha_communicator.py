@@ -64,6 +64,10 @@ class HACommunicator(Communicator):
                     cur_sensor['direction'] = devcfg.get('direction')
                 if devcfg.get('answer'):
                     cur_sensor['answer'] = devcfg.get('answer')
+                # how the device communicates, from its EEP mapping
+                for field in ('secure_teachin_telegrams', 'secure_teachin_bidirectional'):
+                    if devcfg.get(field):
+                        cur_sensor[field] = devcfg.get(field)
                 cur_sensor['persistent']   = devcfg.get('persistent', "1")
 
                 # Better to work with JSON in HA so force JSON usage
@@ -294,6 +298,10 @@ class HACommunicator(Communicator):
     def _bridge_device_identifier(self):
         """return the Home Assistant identifier used for the bridge device"""
         return self._bridge_device()['identifiers']
+
+    def _open_database(self):
+        '''the device database of the device manager'''
+        return self._devmgr.database
 
     def _mqtt_discovery_bridge(self):
         """Publish MQTT discovery for bridge diagnostic entities"""

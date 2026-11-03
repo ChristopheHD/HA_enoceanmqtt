@@ -88,6 +88,52 @@ Typical uses:
 - virtual buttons to control Eltako actuators;
 - workflows where Home Assistant acts as a remote control.
 
+## Secure devices
+
+Some devices only exchange encrypted and authenticated telegrams
+(EnOcean security: VAES encryption, CMAC and rolling code).
+They are declared like any other device: there is nothing to configure, their key is shared when they are paired.
+
+There are two ways to pair them:
+
+- the device sends its own secure teach-in: enable `LEARN`, then trigger the teach-in on the device;
+- `enoceanmqtt` sends its secure teach-in to the device: put the device into pairing mode,
+  then publish `secure_teachin` to its `send` topic, e.g. `enoceanmqtt/radiator/req/send`,
+  or `{"send": "secure_teachin"}` to its `req` topic.
+  A new key is generated on each teach-in: pairing a device again (e.g. after a factory reset)
+  replaces its key and rolling codes.
+  The teach-in is sent from the Chip ID of the transceiver,
+  as some devices only communicate with the address they were paired from.
+
+Once a device is paired, its telegrams are decrypted and the telegrams sent to it are encrypted.
+The keys and rolling codes are kept in the device database (`db_file`): back it up,
+without it the devices have to be paired again.
+
+Pre-shared key (PSK) teach-ins and SEC (`0x30`) telegrams of PTM switches are not supported.
+
+## D2-33-00 heaters
+
+Heaters using EEP `D2-33-00` (e.g. ADEO / EQUATION heaters) are exposed as a Home Assistant climate entity,
+with temperature, heating, window, presence, derogation and energy entities.
+
+- the setpoint is sent as a permanent program. The heater does not report it: the setpoint command is
+  retained on MQTT so that Home Assistant reads it back and `enoceanmqtt` sends it again when restarted;
+- the messages of the heater are acknowledged, and its time and program requests answered,
+  as required by the EEP;
+- these heaters communicate securely (see [Secure devices](#secure-devices)): to pair one,
+  put it into pairing mode from its control panel, then press its `secure_teachin` button within a minute.
+  As done by their gateway, the secure teach-in is sent in 3 telegrams;
+
+For example, an EQUATION Sorali heater:
+
+```ini
+[living_room/heater]
+address = 0x058EDA56
+rorg = 0xD2
+func = 0x33
+type = 0x00
+```
+
 ## Eltako FAM14
 
 For some Eltako devices, virtual buttons can be used to work around the limits of direct pairing.
