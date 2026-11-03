@@ -1916,7 +1916,7 @@
       - component: binary_sensor
         name: "filter_maintenance_required"
         config:
-          state_topic: "d2/MT2"
+          state_topic: "MT2"
           value_template: "{{ 'ON' if value_json.FMS | int == 1 else 'OFF' }}"
           payload_on: "ON"
           payload_off: "OFF"
@@ -1925,7 +1925,7 @@
       - component: "binary_sensor"
         name: "defrost_mode"
         config:
-          state_topic: "d2/MT2"
+          state_topic: "MT2"
           value_template: "{{ 'ON' if value_json.DMS | int == 1 else 'OFF' }}"
           payload_on: "ON"
           payload_off: "OFF"
@@ -1933,7 +1933,7 @@
       - component: "binary_sensor"
         name: "cooling_protection"
         config:
-          state_topic: "d2/MT2"
+          state_topic: "MT2"
           value_template: "{{ 'ON' if value_json.CPS | int == 1 else 'OFF' }}"
           payload_on: "ON"
           payload_off: "OFF"
@@ -1941,7 +1941,7 @@
       - component: "binary_sensor"
         name: "drain_heater"
         config:
-          state_topic: "d2/MT2"
+          state_topic: "MT2"
           value_template: "{{ 'ON' if value_json.DHS | int == 1 else 'OFF' }}"
           payload_on: "ON"
           payload_off: "OFF"
@@ -1949,7 +1949,7 @@
       - component: "binary_sensor"
         name: "timer_operation"
         config:
-          state_topic: "d2/MT2"
+          state_topic: "MT2"
           value_template: "{{ 'ON' if value_json.TOMS | int == 1 else 'OFF' }}"
           payload_on: "ON"
           payload_off: "OFF"
@@ -1957,7 +1957,7 @@
       - component: "sensor"
         name: "operation_hours"
         config:
-          state_topic: "d2/MT3"
+          state_topic: "MT3"
           value_template: "{{ value_json.OHC }}"
           unit_of_measurement: "h"
           device_class: "duration"
@@ -1965,19 +1965,19 @@
       - component: "sensor"
         name: "software_version"
         config:
-          state_topic: "d2/MT3"
+          state_topic: "MT3"
           value_template: "{{ value_json.SVI }}"
           icon: "mdi:information-outline"
       - component: "sensor"
         name: "info_message_status"
         config:
-          state_topic: "d2/MT3"
+          state_topic: "MT3"
           value_template: "{{ value_json.IMS | int }}"
           icon: "mdi:information-outline"
       - component: "sensor"
         name: "fault_status"
         config:
-          state_topic: "d2/MT3"
+          state_topic: "MT3"
           value_template: "{{ value_json.FS | int }}"
           icon: "mdi:alert-circle-outline"
     0x01:
