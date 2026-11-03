@@ -1,0 +1,17 @@
+{{- if and .Values.webui.enabled .Values.webui.service.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ha-enoceanmqtt.fullname" . }}-webui
+  labels:
+    {{- include "ha-enoceanmqtt.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.webui.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.webui.service.port }}
+      targetPort: webui
+      protocol: TCP
+  selector:
+    {{- include "ha-enoceanmqtt.selectorLabels" . | nindent 4 }}
+{{- end }}

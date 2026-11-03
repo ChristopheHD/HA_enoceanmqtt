@@ -3,6 +3,9 @@
 enocean_port    = /dev/enocean
 log_packets     = 1
 overlay         = HA
+webui_enabled   = true
+webui_host      = 0.0.0.0
+webui_port      = 8080
 
 ## the discovery prefix is used by MQTT discovery in Home Assistant
 mqtt_discovery_prefix = homeassistant/

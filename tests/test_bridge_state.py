@@ -105,42 +105,93 @@ def install_fake_dependencies():
     class FakeTinyDB:
         def __init__(self, *_args, **_kwargs):
             self.records = []
+            self.tables = {}
+
+        def table(self, name):
+            if name not in self.tables:
+                self.tables[name] = FakeTinyDB()
+            return self.tables[name]
 
         def all(self):
             return list(self.records)
 
-        def contains(self, *_args, **_kwargs):
-            return False
+        def contains(self, condition=None, **_kwargs):
+            return any(condition(record) for record in self.records) if condition else False
 
-        def get(self, *_args, **_kwargs):
-            return None
+        def get(self, condition=None, **_kwargs):
+            return next(
+                (record for record in self.records if condition(record)),
+                None
+            ) if condition else None
 
-        def update(self, *_args, **_kwargs):
-            return []
+        def update(self, fields, condition=None, **_kwargs):
+            updated = []
+            for index, record in enumerate(self.records):
+                if condition is None or condition(record):
+                    record.update(fields)
+                    updated.append(index)
+            return updated
 
         def insert(self, record):
             self.records.append(record)
             return len(self.records)
 
-        def upsert(self, record, *_args, **_kwargs):
+        def upsert(self, record, condition=None, **_kwargs):
+            for index, existing in enumerate(self.records):
+                if condition is not None and condition(existing):
+                    existing.update(record)
+                    return [index]
             self.records.append(record)
-            return [len(self.records)]
+            return [len(self.records) - 1]
 
-        def remove(self, *_args, **_kwargs):
-            return []
+        def remove(self, condition=None, **_kwargs):
+            removed = []
+            retained = []
+            for index, record in enumerate(self.records):
+                if condition is not None and condition(record):
+                    removed.append(index)
+                else:
+                    retained.append(record)
+            self.records = retained
+            return removed
 
     class FakeQuery:
+        def __init__(self, path=None):
+            self.path = path or []
+
         def __getattr__(self, _name):
-            return self
+            return FakeQuery(self.path + [_name])
 
-        def __getitem__(self, _name):
-            return self
+        def __getitem__(self, name):
+            return FakeQuery(self.path + [name])
 
-        def all(self, *_args, **_kwargs):
-            return self
+        def all(self, values):
+            def matches(record):
+                value = record
+                for key in self.path:
+                    value = value.get(key, []) if isinstance(value, dict) else []
+                return all(item in value for item in values)
+            return matches
 
-        def __eq__(self, _other):
-            return self
+        def __eq__(self, expected):
+            def matches(record):
+                value = record
+                for key in self.path:
+                    value = value.get(key) if isinstance(value, dict) else None
+                return value == expected
+            return matches
+
+        def matches(self, expression):
+            import re
+
+            pattern = re.compile(expression)
+
+            def matches(record):
+                value = record
+                for key in self.path:
+                    value = value.get(key) if isinstance(value, dict) else None
+                return isinstance(value, str) and pattern.search(value) is not None
+            return matches
 
     fake_tinydb = types.ModuleType('tinydb')
     fake_tinydb.TinyDB = FakeTinyDB
@@ -624,6 +675,7 @@ class DiscoveryAvailabilityTests(unittest.TestCase):
             'mqtt_discovery_prefix': 'homeassistant/',
             'mqtt_client_id': 'client-1',
             'mqtt_keepalive': '60',
+            'webui_enabled': 'false',
         }
         return HACommunicator(config, [])
 
@@ -770,6 +822,36 @@ class DiscoveryAvailabilityTests(unittest.TestCase):
             discovered['device']['via_device'],
             comm._bridge_device_identifier(),
         )
+
+    def test_managed_eep_and_model_profiles_expand_to_bridge_sensors(self):
+        comm = self.make_ha_communicator()
+        eep_sensors = comm._expand_device({
+            'id': 'eep-id',
+            'name': 'entry_sensor',
+            'address': 0x12345678,
+            'rorg': 0xA5,
+            'func': 0x02,
+            'type': 0x01,
+            'virtual': '0'
+        })
+        self.assertEqual(len(eep_sensors), 1)
+        self.assertEqual(eep_sensors[0]['name'], 'enoceanmqtt/entry_sensor')
+        self.assertEqual(eep_sensors[0]['address'], 0x12345678)
+
+        model_sensors = comm._expand_device({
+            'id': 'model-id',
+            'name': 'window_cover',
+            'address': 0x12345678,
+            'model': 'eltako/fsb14',
+            'sender': 0xFF123456,
+            'virtual': '1'
+        })
+        self.assertEqual(len(model_sensors), 2)
+        self.assertEqual(
+            [sensor['name'] for sensor in model_sensors],
+            ['enoceanmqtt/window_cover/a5', 'enoceanmqtt/window_cover/f6']
+        )
+        self.assertTrue(all(sensor['virtual'] == '1' for sensor in model_sensors))
 
     def test_bridge_discovery_publishes_binary_sensor_and_version_sensor(self):
         comm = self.make_ha_communicator()

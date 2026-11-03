@@ -20,8 +20,34 @@ Key fields:
 - `type`
 - `sender` for virtual devices
 - `virtual = 1` for emulated devices
-
 The section name becomes the MQTT and Home Assistant device name.
+
+## Device management UI
+
+With the Home Assistant overlay enabled, the bridge serves a device-management
+page at `http://<bridge-host>:8080/` by default. It can add and remove EEP- or
+model-based devices without restarting the bridge. EEP and model choices are
+read from the configured `mapping.yaml`.
+
+The UI stores device definitions in the existing TinyDB file. On the first
+startup with the Home Assistant overlay, device sections from the INI
+configuration are imported into TinyDB once. The INI file is left unchanged;
+a migration marker in TinyDB prevents the import from running again on
+subsequent startups. TinyDB is the source of device definitions managed by the
+UI after migration.
+
+The web server settings are:
+
+```ini
+webui_enabled = true
+webui_host = 0.0.0.0
+webui_port = 8080
+```
+
+The server is designed to work behind a path-prefix reverse proxy such as
+future Home Assistant Ingress integration. It does not provide its own login;
+do not expose the port to untrusted networks. Restrict access to a trusted
+network or an authenticated proxy.
 
 ## Pairing
 

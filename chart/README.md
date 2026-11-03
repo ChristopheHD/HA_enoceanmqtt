@@ -51,3 +51,9 @@ This document provides detailed configuration options for the Home Assistant Hel
 | `configMount` | Mount spec for config, allow override | `[]` |
 | `initContainers` | List of initialization containers | `[]` |
 | `enoceanmqtt` | Software configuration bloc, see values for details | `{}` |
+| `webui.enabled` | Enable the device-management web UI | `true` |
+| `webui.host` | Address on which the UI listens inside the container | `0.0.0.0` |
+| `webui.port` | HTTP port used by the UI | `8080` |
+| `webui.service.enabled` | Create an internal Kubernetes Service for the UI | `true` |
+| `webui.service.type` | Kubernetes Service type for the UI | `ClusterIP` |
+| `webui.service.port` | Port exposed by the UI Service | `8080` |

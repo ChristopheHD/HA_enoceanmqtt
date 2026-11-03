@@ -30,6 +30,8 @@ Steps:
 7. declare your EnOcean devices.
 
 You can then enable the `systemd` service from `standalone/enoceanmqtt.service`.
+The device-management UI is available on port `8080` by default; configure
+`webui_host` and `webui_port` in the `[CONFIG]` section as needed.
 
 ## Docker
 
@@ -44,8 +46,12 @@ The example configuration is `docker/enoceanmqtt.conf.sample`.
 Example run:
 
 ```sh
-docker run --device=/dev/enocean -v my_docker_volume:/config makgitdev/ha_enoceanmqtt_dev-aarch64
+docker run --device=/dev/enocean -p 8080:8080 -v my_docker_volume:/config makgitdev/ha_enoceanmqtt_dev-aarch64
 ```
+
+The UI uses `/config/device_db.json` by default in Docker so device definitions
+survive container restarts. The UI port is configurable; publish the matching
+container port when using a non-default value.
 
 ## Home Assistant Addon
 
@@ -61,3 +67,9 @@ The same core settings apply in every mode:
 - `mqtt_discovery_prefix` drives Home Assistant discovery;
 - `mqtt_prefix` drives the MQTT topics used by devices;
 - `overlay = HA` enables the Home Assistant behavior.
+
+The Helm chart creates an internal `ClusterIP` service for the UI by default.
+Set `webui.service.enabled: false` to disable it, or use the service as the
+upstream for a trusted Ingress/reverse proxy. The page honors the
+`X-Ingress-Path` prefix so relative assets and API requests work when mounted
+under a path.

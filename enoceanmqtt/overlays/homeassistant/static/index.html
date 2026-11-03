@@ -1,0 +1,122 @@
+<!--
+THESIS: A clear device registry for the bridge, not another configuration file.
+OWN-WORLD: Restrained slate, soft paper, and one precise teal action color.
+STORY: Choose a mapped EEP or model, identify the radio device, and manage it in place.
+FIRST VIEWPORT: The device registry leads; its Add a device action opens the configuration dialog.
+FORM: Operate / device register with a focused, native add-device dialog.
+-->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <base href="/">
+  <title>Home Assistant EnOcean bridge</title>
+  <link rel="stylesheet" href="app.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="masthead">
+      <a class="brand" href="./" aria-label="EnOceanMQTT device registry">
+        <span class="brand-mark" aria-hidden="true">E</span>
+        <span>EnOceanMQTT</span>
+      </a>
+      <span class="connection-label"><span class="status-dot"></span> Bridge connection</span>
+    </header>
+
+    <section class="intro" aria-labelledby="page-title">
+      <h1 id="page-title">Home Assistant EnOcean bridge</h1>
+    </section>
+
+    <div class="workspace">
+      <section class="panel registry-panel" aria-labelledby="registry-title">
+        <div class="panel-heading registry-heading">
+          <div>
+            <h2 id="registry-title">Device registry <span id="device-count" class="count">—</span></h2>
+          </div>
+          <div class="registry-actions">
+            <button id="open-add-dialog" class="primary-button add-device-button" type="button">
+              Add a device <span aria-hidden="true">+</span>
+            </button>
+          </div>
+        </div>
+        <div id="registry-content" aria-live="polite">
+          <div class="skeleton-list" aria-label="Loading devices">
+            <span></span><span></span><span></span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <dialog id="add-device-dialog" class="add-dialog" aria-labelledby="add-title">
+      <section class="panel add-panel">
+        <div class="panel-heading">
+          <div>
+            <h2 id="add-title">Add a device</h2>
+          </div>
+          <button id="close-add-dialog" class="dialog-close" type="button" aria-label="Close add device dialog">×</button>
+        </div>
+
+        <form id="device-form">
+          <label class="field">
+            <span>Device name</span>
+            <input id="device-name" name="name" autocomplete="off" maxlength="64"
+                   placeholder="e.g. hallway_switch" required>
+            <small>Used in MQTT topics and Home Assistant.</small>
+          </label>
+
+          <div class="field-pair">
+            <label class="field">
+              <span>Profile type</span>
+              <select id="device-type" name="type">
+                <option value="eep">EEP</option>
+                <option value="model">Model</option>
+              </select>
+            </label>
+            <label class="field">
+              <span id="profile-label">EEP profile</span>
+              <select id="device-profile" name="profile" required>
+                <option value="">Loading profiles…</option>
+              </select>
+            </label>
+          </div>
+
+          <label class="field">
+            <span>Device address</span>
+            <input id="device-address" name="address" inputmode="text"
+                   placeholder="0012ABCD" maxlength="8" pattern="[0-9a-fA-F]{8}"
+                   title="Enter exactly 8 hexadecimal digits (4 bytes), without a 0x prefix." required>
+            <small>Enter exactly 8 hexadecimal digits (4 bytes). Do not include 0x.</small>
+          </label>
+
+          <div class="virtual-row">
+            <div>
+              <span class="virtual-title">Virtual device</span>
+              <small>Use a sender ID for commands emitted by the bridge.</small>
+            </div>
+            <label class="switch" aria-label="Virtual device">
+              <input id="device-virtual" name="virtual" type="checkbox">
+              <span class="switch-track" aria-hidden="true"></span>
+            </label>
+          </div>
+
+          <label class="field sender-field" id="sender-field" hidden>
+            <span>Sender ID</span>
+            <input id="device-sender" name="sender" inputmode="text"
+                   placeholder="FF123456" maxlength="10">
+            <small>Enter the transmitter’s Base ID or assigned sender ID.</small>
+          </label>
+
+          <p id="form-message" class="message" role="status" aria-live="polite"></p>
+          <button id="submit-button" class="primary-button" type="submit">
+            <span>Add device</span><span aria-hidden="true">→</span>
+          </button>
+        </form>
+      </section>
+    </dialog>
+
+  </main>
+</body>
+</html>
