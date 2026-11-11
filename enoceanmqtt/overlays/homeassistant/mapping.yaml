@@ -6227,6 +6227,45 @@ afriso:
         state_class: "measurement"
         unit_of_measurement: "°C"
 
+  ftf:
+    device_config:
+    - rorg: "0xA5"
+      func: "0x10"
+      type: "0x12"
+      command: ""
+      channel: ""
+      log_learn: ""
+      direction: ""
+      answer: ""
+    entities:
+    - component: sensor
+      name: "setpoint"
+      config:
+        state_topic: "a5"
+        value_template: >-
+          {{ ((value_json.SP | float(default=0)) / 255.0 * 22.0 + 8.0) | round(1) }}
+        device_class: "temperature"
+        state_class: "measurement"
+        unit_of_measurement: "°C"
+    - component: sensor
+      name: "temp"
+      config:
+        state_topic: "a5"
+        value_template: >-
+          {{ value_json.TMP | float(default=0) | round(1) }}
+        device_class: "temperature"
+        state_class: "measurement"
+        unit_of_measurement: "°C"
+    - component: sensor
+      name: "humidity"
+      config:
+        state_topic: "a5"
+        value_template: >-
+          {{ value_json.HUM | float(default=0) | round(1) }}
+        device_class: "humidity"
+        state_class: "measurement"
+        unit_of_measurement: "%"
+
 nodon:
   repeater:
     device_config:
