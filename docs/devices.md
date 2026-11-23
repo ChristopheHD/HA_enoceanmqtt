@@ -72,6 +72,7 @@ When a device is not supported yet:
 - [x] Becker shutters
 - [x] Eltako FAM14 workflows
 - [x] NodOn soft button `D2-03-0A`
+- [x] Leviton WSP20-9D0 line-voltage relay receiver `A5-38-08` (custom mapping: always answers as COM2, inverted command, no UTE teach-in)
 
 ## Adding support
 
