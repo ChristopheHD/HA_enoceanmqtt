@@ -5098,6 +5098,11 @@
       - component: "switch"
         name: "switch_COM1"
         config:
+          state_topic: ""
+          state_on: "on"
+          state_off: "off"
+          value_template: >-
+            {% if value_json.SW == 1 %}on{% else %}off{% endif %}
           command_topic: "req"
           payload_on: >
             {"COM":"1","TIM":"0","LCK":"0","DEL":"0","SW":"1","send":"clear"}
@@ -5109,6 +5114,9 @@
         name: "light_COM1"
         config:
           schema: "template"
+          state_topic: ""
+          state_template: >-
+            {% if value_json.SW == 1 %}on{% else %}off{% endif %}
           command_topic: "req"
           command_on_template: >-
             {"COM":"1","TIM":"0","LCK":"0","DEL":"0","SW":"1","send":"clear"}
