@@ -5123,7 +5123,7 @@
           command_off_template: >-
             {"COM":"1","TIM":"0","LCK":"0","DEL":"0","SW":"0","send":"clear"}
       - component: "button"
-        name: "pair"
+        name: "learn_COM1"
         config:
           command_topic: "req"
           payload_press: >-
@@ -6448,6 +6448,56 @@ lunos:
         payload_off: "off"
         value_template: >-
           {% if value_json.FMS == 1 %}on{% else %}off{% endif %}
+
+leviton:
+  # WSP20-9D0 EnOcean plug-in outlet (speaks A5-38-08 with quirks)
+  # https://www.leviton.com/fr/products/wsp20-9d0
+  # - accepts COM1 or COM2 commands but always answers as COM2
+  # - reports EDIM as a percentage that can reach 255%
+  # - inverted output: when it reports on, its relay is open.
+  #   Newer units can invert polarity in their own settings;
+  #   this mapping assumes it cannot, so the inversion is applied here.
+  wsp20_9d0:
+    device_config:
+    - rorg: "0xA5"
+      func: "0x38"
+      type: "0x08"
+      command: "COM"  # accepts COM1 or COM2, always answers as COM2
+      channel: ""
+      log_learn: ""
+      direction: ""
+      answer: ""
+    # Teaches the outlet to accept the bridge as controller:
+    # the device has no UTE teach-in, pairing is done by sending
+    # the LRN 0 packet; press the button then wait for the LED.
+    # Note: entity names must be MQTT-discovery safe (no spaces) as
+    # they are used verbatim to build the entity unique_id/topic;
+    # set a display name via config:name if you want a friendlier label.
+    entities:
+    - component: "button"
+      name: "send_teach_in_telegram"
+      config:
+        name: "Send Teach-in telegram"
+        command_topic: "req"
+        payload_press: >-
+          {"COM":"1","TIM":"0","LCK":"0","DEL":"0","SW":"0","LRN":"0","send":"clear"}
+        icon: "mdi:connection"
+        entity_category: "config"
+    - component: "switch"
+      name: "relay_output"
+      config:
+        name: "Relay Output"
+        state_topic: "a5"
+        state_on: "on"
+        state_off: "off"
+        value_template: >-
+          {% if value_json.SW == 1 %}off{% else %}on{% endif %}
+        command_topic: "req"
+        payload_on: >
+          {"COM":"2","EDIM":"255","RMP":"1","EDIMR":"0","STR":"0","SW":"1","send":"clear"}
+        payload_off: >
+          {"COM":"2","EDIM":"0","RMP":"1","EDIMR":"0","STR":"0","SW":"0","send":"clear"}
+        icon: "mdi:electric-switch"
 
 # Below are mappings common to all EEPs
 common:
