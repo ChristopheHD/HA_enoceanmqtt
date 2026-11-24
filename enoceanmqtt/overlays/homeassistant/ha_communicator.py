@@ -116,6 +116,8 @@ class HACommunicator(Communicator):
         self._mqtt_discovery_prefix = config.get('mqtt_discovery_prefix', 'homeassistant/')
         if self._mqtt_discovery_prefix[-1] != '/':
             self._mqtt_discovery_prefix += '/'
+        # Keep the bridge offline until the first discovery has been published.
+        self._discovery_pending = True
 
         # Init
         super().__init__(config, sensors)
@@ -131,6 +133,7 @@ class HACommunicator(Communicator):
     def _on_connect(self, mqtt_client, _userdata, _flags, return_code):
         '''callback for when the client receives a CONNACK response from the MQTT server.'''
         if return_code == 0:
+            self._discovery_pending = True
             self._mqtt_connected = True
             logging.info("Succesfully connected to MQTT broker.")
             # listen to enocean send requests
@@ -141,74 +144,10 @@ class HACommunicator(Communicator):
             # replaced by "online" once the bridge is fully ready.
             self._publish_bridge_state(self.BRIDGE_STATE_OFFLINE)
 
-            # Refresh discovery on every successful MQTT connection so retained
-            # configs stay aligned with the current bridge state and mapping.
-            self._mqtt_discovery_bridge()
-
-            # Get all device UIDs in DB
-            known_uids = self._devmgr.db_list_from_fields('uid')
-
-            # This will discover new added sensors in HA while updating existing sensors
-            # configuration when sensor mapping has changed
-            for cur_sensor in self.sensors:
-                if str(cur_sensor.get('ignore')) not in ("True", "true", "1"):
-                    if not cur_sensor.get('model'):
-                        # Create sensor UID
-                        eep = format((cur_sensor['rorg']<<16)+(cur_sensor['func']<<8)+cur_sensor['type'], '06X')
-                        try:
-                            sender = format(cur_sensor.get('sender'),'08X')
-                        except:
-                            sender = 'NONE'
-                        dev_uid = eep+"_"+format(cur_sensor['address'],'08X')+"_"+sender
-                        # Get sensor from DB if it exists
-                        sensor_db = self._devmgr.db_get_device_by_field('name', cur_sensor['name'])
-                        # Sensor discovery/update
-                        cfgtopics = sensor_db.get('cfgtopics', None) if sensor_db else None
-                        self._mqtt_discovery_eep(cur_sensor, cfgtopics)
-                        # Remove device from the UID list
-                        try:
-                            known_uids.remove(dev_uid)
-                        except ValueError:
-                            pass
-                    else:
-                        # Create sensor UID
-                        try:
-                            sender = format(cur_sensor.get('sender'),'08X')
-                        except:
-                            sender = 'NONE'
-                        dev_uid = cur_sensor['manufacturer']+"_"+cur_sensor['model']+"_"+format(cur_sensor['address'],'08X')+"_"+sender
-                        # Retrieve device name from sensor name by removing "/RORG" at the end
-                        name = cur_sensor['name'][:-3]
-                        # Get sensor from DB if it exists
-                        sensor_db = self._devmgr.db_get_device_by_field('name', name)
-                        # Sensor discovery/update
-                        cfgtopics = sensor_db.get('cfgtopics', None) if sensor_db else None
-                        self._mqtt_discovery_model(cur_sensor, cfgtopics)
-                        # Remove device from the UID list
-                        try:
-                            known_uids.remove(dev_uid)
-                        except ValueError:
-                            pass
-
-            # Delete devices that are no more listed in config file
-            logging.debug("List of remaining UIDS: %s", str(known_uids))
-            for dev_uid in known_uids:
-                sensor_db = self._devmgr.db_get_device_by_field('uid', dev_uid)
-                # Remove all device's entities
-                if sensor_db:
-                    for cfgtopic in sensor_db.get('cfgtopics', []):
-                        self.mqtt.publish(f"{self._mqtt_discovery_prefix}{cfgtopic}",
-                                           "", retain=True)
-                # Remove the device from the database
-                self._devmgr.db_remove_device_by_field('uid', dev_uid)
-
-            # Add LEARN button in HA
-            self._mqtt_discovery_system('learn')
-
-            # LEARN status
-            self.mqtt.publish(self._system_status_topic['learn'],
-                              'ON' if self.enocean.teach_in else 'OFF',
-                              retain=True)
+            # Discovery waits for the EnOcean loop to collect gateway metadata.
+            # If the metadata is already cached (for example after a reconnect),
+            # it can be published immediately.
+            self._publish_discovery_if_ready()
 
             # Announce the bridge as online once discovery and the EnOcean sender are ready.
             self._maybe_publish_bridge_online()
@@ -216,6 +155,100 @@ class HACommunicator(Communicator):
             logging.error("Error connecting to MQTT broker: %s",
                           self.CONNECTION_RETURN_CODE[return_code]
                           if return_code < len(self.CONNECTION_RETURN_CODE) else return_code)
+
+    def _mqtt_discovery_devices(self):
+        """publish discovery for configured devices and system entities"""
+        # Get all device UIDs in DB
+        known_uids = self._devmgr.db_list_from_fields('uid')
+
+        # This will discover new added sensors in HA while updating existing sensors
+        # configuration when sensor mapping has changed
+        for cur_sensor in self.sensors:
+            if str(cur_sensor.get('ignore')) not in ("True", "true", "1"):
+                if not cur_sensor.get('model'):
+                    # Create sensor UID
+                    eep = format((cur_sensor['rorg']<<16)+(cur_sensor['func']<<8)+cur_sensor['type'], '06X')
+                    try:
+                        sender = format(cur_sensor.get('sender'),'08X')
+                    except:
+                        sender = 'NONE'
+                    dev_uid = eep+"_"+format(cur_sensor['address'],'08X')+"_"+sender
+                    # Get sensor from DB if it exists
+                    sensor_db = self._devmgr.db_get_device_by_field('name', cur_sensor['name'])
+                    # Sensor discovery/update
+                    cfgtopics = sensor_db.get('cfgtopics', None) if sensor_db else None
+                    self._mqtt_discovery_eep(cur_sensor, cfgtopics)
+                    # Remove device from the UID list
+                    try:
+                        known_uids.remove(dev_uid)
+                    except ValueError:
+                        pass
+                else:
+                    # Create sensor UID
+                    try:
+                        sender = format(cur_sensor.get('sender'),'08X')
+                    except:
+                        sender = 'NONE'
+                    dev_uid = cur_sensor['manufacturer']+"_"+cur_sensor['model']+"_"+format(cur_sensor['address'],'08X')+"_"+sender
+                    # Retrieve device name from sensor name by removing "/RORG" at the end
+                    name = cur_sensor['name'][:-3]
+                    # Get sensor from DB if it exists
+                    sensor_db = self._devmgr.db_get_device_by_field('name', name)
+                    # Sensor discovery/update
+                    cfgtopics = sensor_db.get('cfgtopics', None) if sensor_db else None
+                    self._mqtt_discovery_model(cur_sensor, cfgtopics)
+                    # Remove device from the UID list
+                    try:
+                        known_uids.remove(dev_uid)
+                    except ValueError:
+                        pass
+
+        # Delete devices that are no more listed in config file
+        logging.debug("List of remaining UIDS: %s", str(known_uids))
+        for dev_uid in known_uids:
+            sensor_db = self._devmgr.db_get_device_by_field('uid', dev_uid)
+            # Remove all device's entities
+            if sensor_db:
+                for cfgtopic in sensor_db.get('cfgtopics', []):
+                    self.mqtt.publish(f"{self._mqtt_discovery_prefix}{cfgtopic}",
+                                       "", retain=True)
+            # Remove the device from the database
+            self._devmgr.db_remove_device_by_field('uid', dev_uid)
+
+        # Add LEARN button in HA
+        self._mqtt_discovery_system('learn')
+
+        # LEARN status
+        self.mqtt.publish(self._system_status_topic['learn'],
+                          'ON' if self.enocean.teach_in else 'OFF',
+                          retain=True)
+
+    def _publish_discovery_if_ready(self):
+        """publish all discovery once gateway initialization has completed"""
+        if not getattr(self, '_discovery_pending', False):
+            return False
+        if not self._mqtt_connected or getattr(self, 'enocean_sender', None) is None:
+            return False
+        # _log_gateway_info marks the attempt complete even when the gateway
+        # does not answer the ESP3 version request; that is the bounded fallback.
+        if not getattr(self, '_gateway_info_logged', False) and not getattr(self, '_gateway_info', {}):
+            return False
+
+        self._discovery_pending = False
+        self._mqtt_discovery_bridge()
+        self._mqtt_discovery_devices()
+        return True
+
+    def _on_gateway_info_updated(self):
+        """publish pending discovery after gateway metadata is collected"""
+        if self._publish_discovery_if_ready():
+            self._maybe_publish_bridge_online()
+
+    def _maybe_publish_bridge_online(self):
+        """keep the bridge offline until its discovery has been published"""
+        if getattr(self, '_discovery_pending', False):
+            return False
+        return super()._maybe_publish_bridge_online()
 
     def _on_mqtt_message(self, _mqtt_client, _userdata, msg):
         '''the callback for when a PUBLISH message is received from the MQTT server.'''
@@ -280,20 +313,34 @@ class HACommunicator(Communicator):
     def _bridge_device(self):
         """build the Home Assistant device block for the bridge"""
         client_id = self.conf.get('mqtt_client_id', self._mqtt_base_topic())
-        gateway_info = getattr(self, "_gateway_info", {}) or self._collect_gateway_info()
+        # Gateway metadata is collected by the EnOcean run loop. Do not trigger
+        # a synchronous ESP3 request from the MQTT callback: both loops consume
+        # the same EnOcean receive queue and the response can otherwise be lost.
+        gateway_info = getattr(self, "_gateway_info", {}) or {}
         base_id = gateway_info.get('base_id')
-        esp3_info = gateway_info.get('esp3', {})
-        serial_number = base_id or self.enocean_sender or client_id
-        return {
+        esp3_info = gateway_info.get('esp3') or {}
+        serial_number = base_id or getattr(self, 'enocean_sender', None) or client_id
+        if isinstance(serial_number, (list, tuple)):
+            serial_number = enocean.utils.to_hex_string(serial_number)
+
+        device = {
             'name': 'Enocean Bridge',
             'identifiers': f'enoceanmqtt_bridge_{client_id}',
             'manufacturer': 'EnOcean',
-            'model': esp3_info.get('appDescription', 'Enocean Bridge'),
-            'model_id': esp3_info.get('chipId', 'unknown'),
+            'model': esp3_info.get('appDescription') or 'Enocean Bridge',
+            'model_id': esp3_info.get('chipId') or 'unknown',
             'serial_number': serial_number,
-            'sw_version': esp3_info.get('apiVersion'),
-            'hw_version': esp3_info.get('appVersion'),
         }
+
+        # Home Assistant expects these optional device fields to be strings;
+        # omitting unavailable metadata is valid, while JSON null is rejected.
+        for device_field, gateway_field in (
+                ('sw_version', 'apiVersion'),
+                ('hw_version', 'appVersion')):
+            value = esp3_info.get(gateway_field)
+            if value not in (None, ''):
+                device[device_field] = value
+        return device
 
     def _bridge_device_identifier(self):
         """return the Home Assistant identifier used for the bridge device"""
