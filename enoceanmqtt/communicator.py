@@ -340,6 +340,11 @@ class Communicator:
         self._gateway_info = info
         logging.info("EnOcean gateway info: %s", info)
         self._gateway_info_logged = True
+        self._on_gateway_info_updated()
+
+    def _on_gateway_info_updated(self):
+        """hook called after gateway information has been collected"""
+        return None
 
     def _bridge_is_ready(self):
         """return True when the bridge is ready to announce itself online"""

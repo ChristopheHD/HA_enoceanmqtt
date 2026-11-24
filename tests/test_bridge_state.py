@@ -673,7 +673,11 @@ class DiscoveryAvailabilityTests(unittest.TestCase):
             'mqtt_client_id': 'client-1',
             'mqtt_keepalive': '60',
         }
-        return HACommunicator(config, [])
+        comm = HACommunicator(config, [])
+        # Direct callback tests do not run the EnOcean loop. Mark the metadata
+        # collection attempt as complete so they can exercise MQTT behavior.
+        comm._gateway_info_logged = True
+        return comm
 
     def test_ha_discovery_includes_bridge_availability(self):
         comm = self.make_ha_communicator()
@@ -880,6 +884,87 @@ class DiscoveryAvailabilityTests(unittest.TestCase):
                 for item in comm.mqtt.published
             )
         )
+
+    def test_bridge_discovery_omits_unavailable_device_versions(self):
+        comm = self.make_ha_communicator()
+        comm.enocean_sender = [0x11, 0x22, 0x33, 0x44]
+
+        comm._on_connect(comm.mqtt, None, None, 0)
+
+        payloads = [
+            json.loads(item['payload'])
+            for item in comm.mqtt.published
+            if item['topic'].endswith('/config') and item['payload']
+        ]
+        bridge_configs = [
+            item for item in payloads
+            if item.get('device', {}).get('identifiers') == 'enoceanmqtt_bridge_client-1'
+        ]
+
+        self.assertTrue(bridge_configs)
+        for config in bridge_configs:
+            self.assertNotIn('sw_version', config['device'])
+            self.assertNotIn('hw_version', config['device'])
+            self.assertNotIn('null', json.dumps(config['device']))
+
+    def test_bridge_discovery_is_refreshed_when_gateway_info_is_collected(self):
+        comm = self.make_ha_communicator()
+        comm.enocean_sender = [0x11, 0x22, 0x33, 0x44]
+        comm._gateway_info_logged = False
+        comm._collect_gateway_info = lambda: {
+            'base_id': 'FF:EB:E8:80',
+            'esp3': {
+                'appVersion': '2.15.0.0',
+                'apiVersion': '2.6.9.0',
+                'chipId': '058ad7d1',
+                'appDescription': 'GATEWAYCTRL',
+            },
+        }
+
+        comm._on_connect(comm.mqtt, None, None, 0)
+        comm._log_gateway_info()
+
+        version_configs = [
+            json.loads(item['payload'])
+            for item in comm.mqtt.published
+            if item['topic'] == 'homeassistant/sensor/enoceanmqtt_bridge/version/config'
+        ]
+        self.assertEqual(len(version_configs), 1)
+        self.assertEqual(version_configs[0]['device']['sw_version'], '2.6.9.0')
+        self.assertEqual(version_configs[0]['device']['hw_version'], '2.15.0.0')
+
+    def test_discovery_waits_for_gateway_info(self):
+        comm = self.make_ha_communicator()
+        comm.enocean_sender = [0x11, 0x22, 0x33, 0x44]
+        comm._gateway_info_logged = False
+
+        comm._on_connect(comm.mqtt, None, None, 0)
+
+        self.assertFalse(any(item['topic'].endswith('/config') for item in comm.mqtt.published))
+        self.assertEqual(
+            [json.loads(item['payload']) for item in comm.mqtt.published
+             if item['topic'] == 'enoceanmqtt/__system/state'],
+            [{'state': 'offline'}],
+        )
+
+        comm._gateway_info = {
+            'base_id': 'FF:EB:E8:80',
+            'esp3': {
+                'appVersion': '2.15.0.0',
+                'apiVersion': '2.6.9.0',
+                'chipId': '058ad7d1',
+                'appDescription': 'GATEWAYCTRL',
+            },
+        }
+        comm._gateway_info_logged = True
+        comm._on_gateway_info_updated()
+
+        self.assertTrue(any(item['topic'].endswith('/config') for item in comm.mqtt.published))
+        state_publishes = [
+            json.loads(item['payload']) for item in comm.mqtt.published
+            if item['topic'] == 'enoceanmqtt/__system/state'
+        ]
+        self.assertEqual(state_publishes[-1], {'state': 'online'})
 
     def test_learn_state_is_republished_when_learn_changes(self):
         comm = self.make_ha_communicator()
