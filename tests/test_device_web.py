@@ -64,6 +64,10 @@ class DeviceWebTests(unittest.TestCase):
                             'secure_teachin_telegrams': 3,
                             'secure_teachin_bidirectional': True
                         }
+                    },
+                    0x02: {
+                        'entities': [],
+                        'device_config': {}
                     }
                 }
             },
@@ -152,6 +156,27 @@ class DeviceWebTests(unittest.TestCase):
                 'address': '12345678',
                 'virtual': True
             })
+
+    def test_secure_teachin_settings_are_available_for_every_profile(self):
+        options = self.server._build_options(self.mapping)
+        default_profile = next(
+            item for item in options['eeps'] if item['value'] == 'A5-02-02'
+        )
+        self.assertEqual(default_profile['security'], {
+            'secure_teachin_telegrams': 2,
+            'secure_teachin_bidirectional': False
+        })
+
+        device = self.server._validate_device({
+            'name': 'secure_entry',
+            'type': 'eep',
+            'profile': 'A5-02-02',
+            'address': '12345678',
+            'secure_teachin_telegrams': 3,
+            'secure_teachin_bidirectional': True
+        })
+        self.assertEqual(device['secure_teachin_telegrams'], 3)
+        self.assertTrue(device['secure_teachin_bidirectional'])
 
     def test_device_address_requires_four_hexadecimal_bytes(self):
         payload = {

@@ -314,12 +314,9 @@ class DeviceWebServer:
             for field in ('secure_teachin_telegrams', 'secure_teachin_bidirectional'):
                 if field in config and field not in security:
                     security[field] = config[field]
-        if not security:
-            return None
-        if 'secure_teachin_telegrams' in security:
-            security['secure_teachin_telegrams'] = int(
-                security['secure_teachin_telegrams']
-            )
+        security['secure_teachin_telegrams'] = int(
+            security.get('secure_teachin_telegrams', 2)
+        )
         security['secure_teachin_bidirectional'] = (
             str(security.get('secure_teachin_bidirectional', False)).lower()
             in ('true', '1', 'yes')
