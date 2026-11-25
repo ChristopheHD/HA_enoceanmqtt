@@ -2,6 +2,11 @@
 
 Helmchart for ha-enoceanmqtt
 
+The CI publishes development charts with a unique prerelease version such as
+`1.0.1-dev.123456789`. The chart `appVersion` points to the immutable Docker
+SHA tag used by that build. Release tags such as `v1.1.0` produce chart and
+image version `1.1.0`.
+
 **Homepage:** <https://github.com/ChristopheHD/HA_enoceanmqtt>
 
 ## Values

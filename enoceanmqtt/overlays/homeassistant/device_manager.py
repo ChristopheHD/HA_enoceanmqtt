@@ -7,7 +7,9 @@ import hashlib
 import json
 import copy
 from threading import RLock
-from tinydb import TinyDB, Query
+from tinydb import Query
+
+from enoceanmqtt.database import open_database
 
 class DeviceManager():
     '''Device Manager class, providing database methods'''
@@ -18,12 +20,17 @@ class DeviceManager():
         db_file = config.get('db_file')
         if not db_file:
             db_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'device_db.json')
-        self._db = TinyDB(db_file, indent=4)
+        self._db = open_database(db_file)
         self._device_config = self._db.table('device_config')
         self._metadata = self._db.table('metadata')
         self._lock = RLock()
         self.db_add_uid()
         logging.info("Device database %s correctly read/created", db_file)
+
+    @property
+    def database(self):
+        """Return the shared database used for secure-device state."""
+        return self._db
 
     def migrate_ini_devices(self, sensors, mqtt_prefix):
         """Import legacy INI devices once without changing the source configuration."""
@@ -65,34 +72,58 @@ class DeviceManager():
     def add_config_device(self, device):
         """Persist a new UI-managed device definition."""
         with self._lock:
-            for existing in self._device_config.all():
-                if existing.get('name', '').casefold() == device['name'].casefold():
-                    raise ValueError("A device with this name already exists")
-                same_profile = (
-                    existing.get('model', '').lower() == device.get('model', '').lower()
-                    if device.get('model')
-                    else (
-                        existing.get('rorg') == device.get('rorg')
-                        and existing.get('func') == device.get('func')
-                        and existing.get('type') == device.get('type')
-                    )
-                )
-                if (
-                        same_profile
-                        and existing.get('address') == device.get('address')
-                        and existing.get('sender') == device.get('sender')
-                ):
-                    raise ValueError("This device profile and address already exist")
+            self._validate_config_device(device)
             stored_device = copy.deepcopy(device)
             self._device_config.insert(stored_device)
             return stored_device
+
+    def update_config_device(self, device_id, device):
+        """Replace an existing UI-managed device definition."""
+        with self._lock:
+            current = self._device_config.get(Query().id == device_id)
+            if current is None:
+                raise ValueError("The device no longer exists.")
+            updated_device = copy.deepcopy(device)
+            updated_device['id'] = device_id
+            self._validate_config_device(updated_device, exclude_id=device_id)
+
+            def replace_document(document):
+                document.clear()
+                document.update(copy.deepcopy(updated_device))
+
+            self._device_config.update(
+                replace_document,
+                Query().id == device_id
+            )
+            return updated_device
+
+    def _validate_config_device(self, device, exclude_id=None):
+        for existing in self._device_config.all():
+            if existing.get('id') == exclude_id:
+                continue
+            if existing.get('name', '').casefold() == device['name'].casefold():
+                raise ValueError("A device with this name already exists")
+            same_profile = (
+                existing.get('model', '').lower() == device.get('model', '').lower()
+                if device.get('model')
+                else (
+                    existing.get('rorg') == device.get('rorg')
+                    and existing.get('func') == device.get('func')
+                    and existing.get('type') == device.get('type')
+                )
+            )
+            if (
+                    same_profile
+                    and existing.get('address') == device.get('address')
+                    and existing.get('sender') == device.get('sender')
+            ):
+                raise ValueError("This device profile and address already exist")
 
     def remove_config_device(self, device_id):
         """Remove a UI-managed device definition."""
         with self._lock:
             removed = self._device_config.remove(Query().id == device_id)
             return bool(removed)
-
     def db_add_uid(self):
         '''Update old databases without UID'''
         with self._lock:

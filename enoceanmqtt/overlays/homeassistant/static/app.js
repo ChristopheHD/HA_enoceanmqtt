@@ -5,6 +5,9 @@ const profileLabel = document.querySelector('#profile-label');
 const virtualCheckbox = document.querySelector('#device-virtual');
 const senderField = document.querySelector('#sender-field');
 const senderInput = document.querySelector('#device-sender');
+const securityFields = document.querySelector('#security-fields');
+const secureTeachinTelegrams = document.querySelector('#secure-teachin-telegrams');
+const secureTeachinBidirectional = document.querySelector('#secure-teachin-bidirectional');
 const message = document.querySelector('#form-message');
 const submitButton = document.querySelector('#submit-button');
 const registry = document.querySelector('#registry-content');
@@ -12,8 +15,10 @@ const deviceCount = document.querySelector('#device-count');
 const addDialog = document.querySelector('#add-device-dialog');
 const openAddDialogButton = document.querySelector('#open-add-dialog');
 const closeAddDialogButton = document.querySelector('#close-add-dialog');
+const dialogTitle = document.querySelector('#add-title');
 
 let profileOptions = { eep: [], model: [] };
+let editingDeviceId = null;
 
 function showMessage(text, success = false) {
   message.textContent = text;
@@ -31,6 +36,7 @@ function renderProfiles() {
   if (!options.length) {
     profileSelect.add(new Option('No profiles available', ''));
     profileSelect.disabled = true;
+    securityFields.hidden = true;
     return;
   }
   profileSelect.disabled = false;
@@ -38,11 +44,61 @@ function renderProfiles() {
   for (const profile of options) {
     profileSelect.add(new Option(profile.label, profile.value));
   }
+  renderSecurityFields();
+}
+
+function selectedProfile() {
+  return selectedOptions().find((profile) => profile.value === profileSelect.value);
+}
+
+function renderSecurityFields(security = null) {
+  const mappedSecurity = selectedProfile()?.security;
+  const settings = security || mappedSecurity;
+  securityFields.hidden = !settings;
+  if (!settings) return;
+  secureTeachinTelegrams.value = String(settings.secure_teachin_telegrams || 2);
+  secureTeachinBidirectional.checked = Boolean(settings.secure_teachin_bidirectional);
+}
+
+function prepareAddForm() {
+  editingDeviceId = null;
+  form.reset();
+  showMessage('');
+  dialogTitle.textContent = 'Add a device';
+  submitButton.querySelector('span').textContent = 'Add device';
+  senderField.hidden = true;
+  senderInput.required = false;
+  renderProfiles();
+}
+
+function editDevice(device) {
+  editingDeviceId = device.id;
+  form.reset();
+  showMessage('');
+  dialogTitle.textContent = 'Edit device';
+  submitButton.querySelector('span').textContent = 'Save changes';
+  document.querySelector('#device-name').value = device.name;
+  document.querySelector('#device-address').value = device.address;
+  deviceType.value = device.type;
+  renderProfiles();
+  profileSelect.value = device.profile;
+  renderSecurityFields(device.security);
+  virtualCheckbox.checked = device.virtual;
+  senderField.hidden = !device.virtual;
+  senderInput.required = device.virtual;
+  senderInput.value = device.sender || '';
+  addDialog.showModal();
 }
 
 function deviceElement(device) {
   const row = document.createElement('li');
   row.className = 'device-row';
+
+  const edit = document.createElement('button');
+  edit.className = 'device-edit';
+  edit.type = 'button';
+  edit.setAttribute('aria-label', `Edit ${device.name}`);
+  edit.addEventListener('click', () => editDevice(device));
 
   const primary = document.createElement('div');
   primary.className = 'device-main';
@@ -93,7 +149,8 @@ function deviceElement(device) {
   remove.append(trashIcon);
   remove.addEventListener('click', () => deleteDevice(device, remove));
 
-  row.append(primary, details, remove);
+  edit.append(primary, details);
+  row.append(edit, remove);
   return row;
 }
 
@@ -169,7 +226,11 @@ async function deleteDevice(device, button) {
 }
 
 deviceType.addEventListener('change', renderProfiles);
-openAddDialogButton.addEventListener('click', () => addDialog.showModal());
+profileSelect.addEventListener('change', () => renderSecurityFields());
+openAddDialogButton.addEventListener('click', () => {
+  prepareAddForm();
+  addDialog.showModal();
+});
 closeAddDialogButton.addEventListener('click', () => addDialog.close());
 addDialog.addEventListener('click', (event) => {
   if (event.target === addDialog) addDialog.close();
@@ -192,25 +253,33 @@ form.addEventListener('submit', async (event) => {
     virtual: virtualCheckbox.checked,
     sender: senderInput.value.trim()
   };
+  if (!securityFields.hidden) {
+    payload.secure_teachin_telegrams = Number(secureTeachinTelegrams.value);
+    payload.secure_teachin_bidirectional = secureTeachinBidirectional.checked;
+  }
   try {
-    const response = await fetch('api/devices', {
-      method: 'POST',
+    const response = await fetch(
+      editingDeviceId
+        ? `api/devices/${encodeURIComponent(editingDeviceId)}`
+        : 'api/devices',
+      {
+      method: editingDeviceId ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
-    });
+      }
+    );
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Could not add the device.');
-    form.reset();
-    senderField.hidden = true;
-    senderInput.required = false;
-    renderProfiles();
+    prepareAddForm();
     await loadDevices();
     addDialog.close();
   } catch (error) {
     showMessage(error.message);
   } finally {
     submitButton.disabled = false;
-    submitButton.querySelector('span').textContent = 'Add device';
+    submitButton.querySelector('span').textContent = editingDeviceId
+      ? 'Save changes'
+      : 'Add device';
   }
 });
 

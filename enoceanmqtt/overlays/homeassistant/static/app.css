@@ -431,7 +431,7 @@ h2 {
 
 .device-row {
   display: grid;
-  grid-template-columns: minmax(130px, 1fr) minmax(120px, 0.9fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 16px;
   padding: 17px 25px;
@@ -440,6 +440,27 @@ h2 {
 
 .device-row:last-child {
   border-bottom: 0;
+}
+
+.device-edit {
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) minmax(120px, 0.9fr);
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.device-edit:hover .device-name {
+  color: var(--accent-dark);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .device-main {
@@ -489,6 +510,33 @@ h2 {
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+}
+
+.security-fields {
+  margin: 4px 0 14px;
+  padding: 14px 0 1px;
+  border-top: 1px solid #e8edef;
+}
+
+.security-fields[hidden] {
+  display: none;
+}
+
+.security-fields h3 {
+  margin: 0 0 5px;
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.security-fields > p {
+  margin: 0 0 13px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.security-fields .virtual-row {
+  margin-bottom: 12px;
 }
 
 .delete-button {
@@ -672,18 +720,22 @@ h2 {
   }
 
   .device-row {
-    grid-template-columns: minmax(0, 1fr) auto;
     gap: 10px;
     padding: 15px 17px;
   }
 
+  .device-edit {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
   .device-details {
-    grid-column: 1;
+    grid-column: auto;
   }
 
   .delete-button {
     grid-column: 2;
-    grid-row: 1 / span 2;
+    grid-row: 1;
   }
 
   .footer {

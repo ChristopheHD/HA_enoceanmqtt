@@ -102,7 +102,8 @@ class DeviceWebServer:
                         'sender': (
                             '{:08X}'.format(int(device['sender']))
                             if device.get('sender') is not None else ''
-                        )
+                        ),
+                        'security': owner._security_for_device(device)
                     })
                 return devices
 
@@ -156,7 +157,66 @@ class DeviceWebServer:
                     logging.exception("Could not add device through the web UI")
                     self._send_json(500, {'error': 'The device could not be added.'})
                     return
-                self._send_json(201, {'device': self._device_list()[-1]})
+                self._send_json(201, {'device': next(
+                    item for item in self._device_list()
+                    if item['id'] == stored_device['id']
+                )})
+
+            def do_PUT(self):
+                path = self._route_path()
+                prefix = '/api/devices/'
+                if not path.startswith(prefix):
+                    self._send_json(404, {'error': 'Not found.'})
+                    return
+                device_id = unquote(path[len(prefix):])
+                if not device_id or '/' in device_id:
+                    self._send_json(404, {'error': 'Device not found.'})
+                    return
+                previous_device = owner._device_manager.get_config_device(device_id)
+                if previous_device is None:
+                    self._send_json(404, {'error': 'Device not found.'})
+                    return
+                try:
+                    content_length = int(self.headers.get('Content-Length', '0'))
+                except ValueError:
+                    self._send_json(400, {'error': 'Invalid request size.'})
+                    return
+                if content_length <= 0 or content_length > 16384:
+                    self._send_json(413, {'error': 'The device details are too large.'})
+                    return
+                try:
+                    payload = json.loads(self.rfile.read(content_length))
+                    device = owner._validate_device(payload, device_id=device_id)
+                    stored_device = owner._device_manager.update_config_device(
+                        device_id,
+                        device
+                    )
+                    try:
+                        owner._on_change('update', stored_device, previous_device)
+                    except Exception:
+                        owner._device_manager.update_config_device(
+                            device_id,
+                            previous_device
+                        )
+                        try:
+                            owner._on_change('update', previous_device, stored_device)
+                        except Exception:
+                            logging.exception("Could not restore device after a failed update")
+                        raise
+                except ValueError as error:
+                    self._send_json(400, {'error': str(error)})
+                    return
+                except (RuntimeError, TimeoutError) as error:
+                    self._send_json(503, {'error': str(error)})
+                    return
+                except Exception:
+                    logging.exception("Could not update device through the web UI")
+                    self._send_json(500, {'error': 'The device could not be updated.'})
+                    return
+                self._send_json(200, {'device': next(
+                    item for item in self._device_list()
+                    if item['id'] == device_id
+                )})
 
             def do_DELETE(self):
                 path = self._route_path()
@@ -204,8 +264,8 @@ class DeviceWebServer:
         self._server = None
         self._thread = None
 
-    @staticmethod
-    def _build_options(mapping):
+    @classmethod
+    def _build_options(cls, mapping):
         eeps = []
         for rorg, functions in mapping.items():
             if not isinstance(rorg, int) or not isinstance(functions, dict):
@@ -218,7 +278,13 @@ class DeviceWebServer:
                         continue
                     if any(key in profile for key in ('entities', 'virtual', 'device_config')):
                         code = '{:02X}-{:02X}-{:02X}'.format(rorg, func, type_)
-                        eeps.append({'value': code, 'label': code})
+                        eeps.append({
+                            'value': code,
+                            'label': code,
+                            'security': cls._mapping_security(
+                                profile.get('device_config', {})
+                            )
+                        })
 
         models = []
         for manufacturer, model_map in mapping.items():
@@ -230,14 +296,63 @@ class DeviceWebServer:
                 reference = manufacturer.lower() + '/' + str(model).lower()
                 models.append({
                     'value': reference,
-                    'label': manufacturer.replace('_', ' ').title() + ' / ' + str(model)
+                    'label': manufacturer.replace('_', ' ').title() + ' / ' + str(model),
+                    'security': cls._mapping_security(profile.get('device_config', []))
                 })
         return {
             'eeps': sorted(eeps, key=lambda option: option['value']),
             'models': sorted(models, key=lambda option: option['label'].lower())
         }
 
-    def _validate_device(self, payload):
+    @staticmethod
+    def _mapping_security(device_config):
+        configs = device_config if isinstance(device_config, list) else [device_config]
+        security = {}
+        for config in configs:
+            if not isinstance(config, dict):
+                continue
+            for field in ('secure_teachin_telegrams', 'secure_teachin_bidirectional'):
+                if field in config and field not in security:
+                    security[field] = config[field]
+        if not security:
+            return None
+        if 'secure_teachin_telegrams' in security:
+            security['secure_teachin_telegrams'] = int(
+                security['secure_teachin_telegrams']
+            )
+        security['secure_teachin_bidirectional'] = (
+            str(security.get('secure_teachin_bidirectional', False)).lower()
+            in ('true', '1', 'yes')
+        )
+        return security
+
+    def _security_for_device(self, device):
+        if device.get('model'):
+            profile = device['model'].lower()
+            options = self._options['models']
+        else:
+            profile = '{:02X}-{:02X}-{:02X}'.format(
+                int(device['rorg']),
+                int(device['func']),
+                int(device['type'])
+            )
+            options = self._options['eeps']
+        option = next((item for item in options if item['value'] == profile), None)
+        if option is None or option.get('security') is None:
+            return None
+        security = dict(option['security'])
+        if 'secure_teachin_telegrams' in device:
+            security['secure_teachin_telegrams'] = int(
+                device['secure_teachin_telegrams']
+            )
+        if 'secure_teachin_bidirectional' in device:
+            security['secure_teachin_bidirectional'] = (
+                str(device['secure_teachin_bidirectional']).lower()
+                in ('true', '1', 'yes')
+            )
+        return security
+
+    def _validate_device(self, payload, device_id=None):
         if not isinstance(payload, dict):
             raise ValueError("Provide the device details as an object.")
         name = payload.get('name')
@@ -260,23 +375,48 @@ class DeviceWebServer:
             raise ValueError("Choose an EEP or model from the supported list.")
 
         device = {
-            'id': uuid.uuid4().hex,
+            'id': device_id or uuid.uuid4().hex,
             'name': name,
             'address': address,
             'virtual': '1' if payload.get('virtual') is True else '0'
         }
         if device_type == 'eep':
-            option_values = {option['value'] for option in self._options['eeps']}
+            options = self._options['eeps']
+            option_values = {option['value'] for option in options}
             if profile not in option_values:
                 raise ValueError("Choose a supported EEP from the list.")
+            profile_option = next(option for option in options if option['value'] == profile)
             device['rorg'], device['func'], device['type'] = (
                 int(part, 16) for part in profile.split('-')
             )
         else:
-            option_values = {option['value'] for option in self._options['models']}
+            options = self._options['models']
+            option_values = {option['value'] for option in options}
             if profile not in option_values:
                 raise ValueError("Choose a supported model from the list.")
+            profile_option = next(option for option in options if option['value'] == profile)
             device['model'] = profile
+
+        if profile_option.get('security') is not None:
+            mapped_security = profile_option['security']
+            telegrams = payload.get(
+                'secure_teachin_telegrams',
+                mapped_security.get('secure_teachin_telegrams', 2)
+            )
+            try:
+                telegrams = int(telegrams)
+            except (TypeError, ValueError) as error:
+                raise ValueError("Secure teach-in telegrams must be 2 or 3.") from error
+            if telegrams not in (2, 3):
+                raise ValueError("Secure teach-in telegrams must be 2 or 3.")
+            bidirectional = payload.get(
+                'secure_teachin_bidirectional',
+                mapped_security.get('secure_teachin_bidirectional', False)
+            )
+            if not isinstance(bidirectional, bool):
+                raise ValueError("Choose whether secure teach-in is bidirectional.")
+            device['secure_teachin_telegrams'] = telegrams
+            device['secure_teachin_bidirectional'] = bidirectional
 
         sender = payload.get('sender', '')
         if sender:

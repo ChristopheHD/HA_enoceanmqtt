@@ -49,6 +49,8 @@ class DeviceManagerMigrationTests(unittest.TestCase):
             self.assertEqual(len(restarted_manager.get_config_devices()), 1)
             with open(config_path, 'r', encoding='utf-8') as config:
                 self.assertEqual(config.read(), original_config)
+            manager.database.close()
+            restarted_manager.database.close()
 
 
 class DeviceWebTests(unittest.TestCase):
@@ -56,12 +58,23 @@ class DeviceWebTests(unittest.TestCase):
         self.mapping = {
             0xA5: {
                 0x02: {
-                    0x01: {'entities': []}
+                    0x01: {
+                        'entities': [],
+                        'device_config': {
+                            'secure_teachin_telegrams': 3,
+                            'secure_teachin_bidirectional': True
+                        }
+                    }
                 }
             },
             'eltako': {
                 'fsb14': {
-                    'device_config': [{'rorg': '0xA5', 'func': '0x3F', 'type': '0x7F'}]
+                    'device_config': [{
+                        'rorg': '0xA5',
+                        'func': '0x3F',
+                        'type': '0x7F',
+                        'secure_teachin_telegrams': 3
+                    }]
                 }
             }
         }
@@ -73,7 +86,9 @@ class DeviceWebTests(unittest.TestCase):
         self.server = DeviceWebServer(
             self.manager,
             self.mapping,
-            lambda action, device: self.changes.append((action, device['id'])),
+            lambda action, device, _previous=None: self.changes.append(
+                (action, device['id'])
+            ),
             '127.0.0.1',
             0
         )
@@ -83,6 +98,7 @@ class DeviceWebTests(unittest.TestCase):
 
     def tearDown(self):
         self.server.stop()
+        self.manager.database.close()
         self.directory.cleanup()
 
     def test_mapping_yaml_exposes_all_supported_profiles(self):
@@ -113,6 +129,8 @@ class DeviceWebTests(unittest.TestCase):
             'address': '12345678'
         })
         self.assertEqual((eep['rorg'], eep['func'], eep['type']), (0xA5, 0x02, 0x01))
+        self.assertEqual(eep['secure_teachin_telegrams'], 3)
+        self.assertTrue(eep['secure_teachin_bidirectional'])
 
         model = self.server._validate_device({
             'name': 'roller_shutter',
@@ -124,6 +142,8 @@ class DeviceWebTests(unittest.TestCase):
         })
         self.assertEqual(model['model'], 'eltako/fsb14')
         self.assertEqual(model['sender'], 0xFF123456)
+        self.assertEqual(model['secure_teachin_telegrams'], 3)
+        self.assertFalse(model['secure_teachin_bidirectional'])
         with self.assertRaises(ValueError):
             self.server._validate_device({
                 'name': 'virtual_switch',
@@ -180,6 +200,7 @@ class DeviceWebTests(unittest.TestCase):
         )).read().decode('utf-8'))
         self.assertEqual(options['eeps'][0]['value'], 'A5-02-01')
         self.assertEqual(options['models'][0]['value'], 'eltako/fsb14')
+        self.assertEqual(options['eeps'][0]['security']['secure_teachin_telegrams'], 3)
 
         body = json.dumps({
             'name': 'entry_sensor',
@@ -197,6 +218,28 @@ class DeviceWebTests(unittest.TestCase):
         device = json.loads(response.read().decode('utf-8'))['device']
         self.assertEqual(device['name'], 'entry_sensor')
         self.assertEqual(self.changes, [('add', device['id'])])
+
+        body = json.dumps({
+            'name': 'entry_sensor_renamed',
+            'type': 'eep',
+            'profile': 'A5-02-01',
+            'address': '87654321',
+            'virtual': False,
+            'secure_teachin_telegrams': 2,
+            'secure_teachin_bidirectional': False
+        }).encode('utf-8')
+        response = urlopen(Request(
+            self.base_url + prefix + '/api/devices/' + device['id'],
+            data=body,
+            headers={**headers, 'Content-Type': 'application/json'},
+            method='PUT'
+        ))
+        self.assertEqual(response.status, 200)
+        updated = json.loads(response.read().decode('utf-8'))['device']
+        self.assertEqual(updated['id'], device['id'])
+        self.assertEqual(updated['name'], 'entry_sensor_renamed')
+        self.assertEqual(updated['security']['secure_teachin_telegrams'], 2)
+        self.assertEqual(self.changes[-1], ('update', device['id']))
 
         response = urlopen(Request(
             self.base_url + prefix + '/api/devices/' + device['id'],

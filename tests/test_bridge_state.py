@@ -9,6 +9,10 @@ import unittest
 def install_fake_dependencies():
     if 'paho.mqtt.client' in sys.modules:
         return
+    # The security layer of the EnOcean library is used as it is, it does not depend on the hardware
+    security = importlib.import_module('enocean.protocol.security')
+    secure_devices = importlib.import_module('enocean.protocol.secure_devices')
+    constants = importlib.import_module('enocean.protocol.constants')
 
     class FakePublishInfo:
         def __init__(self, topic, payload, retain):
@@ -107,6 +111,9 @@ def install_fake_dependencies():
             self.records = []
             self.tables = {}
 
+        def close(self):
+            pass
+
         def table(self, name):
             if name not in self.tables:
                 self.tables[name] = FakeTinyDB()
@@ -128,7 +135,10 @@ def install_fake_dependencies():
             updated = []
             for index, record in enumerate(self.records):
                 if condition is None or condition(record):
-                    record.update(fields)
+                    if callable(fields):
+                        fields(record)
+                    else:
+                        record.update(fields)
                     updated.append(index)
             return updated
 
@@ -154,6 +164,14 @@ def install_fake_dependencies():
                     retained.append(record)
             self.records = retained
             return removed
+
+        def table(self, *_args, **_kwargs):
+            return FakeTinyDB()
+
+    class FakeDocument(dict):
+        def __init__(self, value, doc_id):
+            super().__init__(value)
+            self.doc_id = doc_id
 
     class FakeQuery:
         def __init__(self, path=None):
@@ -196,7 +214,12 @@ def install_fake_dependencies():
     fake_tinydb = types.ModuleType('tinydb')
     fake_tinydb.TinyDB = FakeTinyDB
     fake_tinydb.Query = FakeQuery
+    fake_tinydb_table = types.ModuleType('tinydb.table')
+    fake_tinydb_table.Table = object
+    fake_tinydb_table.Document = FakeDocument
+    fake_tinydb.table = fake_tinydb_table
     sys.modules['tinydb'] = fake_tinydb
+    sys.modules['tinydb.table'] = fake_tinydb_table
 
     fake_enocean = types.ModuleType('enocean')
     fake_utils = types.ModuleType('enocean.utils')
@@ -261,6 +284,9 @@ def install_fake_dependencies():
         VLD = 0x07
         RPS = 0xF6
         UTE = 0xD4
+        SEC = 0x30
+        SEC_ENCAPS = 0x31
+        SEC_TI = 0x35
 
     class FakeReturnCode:
         def __init__(self, value):
@@ -274,8 +300,13 @@ def install_fake_dependencies():
             self.started = False
             self.stopped = False
             self.teach_in = True
+            self.secure_devices = None
             self.base_id = [0x01, 0x02, 0x03, 0x04]
             self.receive = types.SimpleNamespace(get=self._raise_empty)
+
+        @staticmethod
+        def encrypt(packet):
+            return packet
 
         def _raise_empty(self, *_args, **_kwargs):
             raise queue.Empty
@@ -294,11 +325,14 @@ def install_fake_dependencies():
     fake_constants.PACKET = FakePacketType
     fake_constants.RETURN_CODE = return_code
     fake_constants.RORG = FakeRorg
+    fake_constants.SECURE_STATUS = constants.SECURE_STATUS
     fake_communicators_communicator.Communicator = FakeBaseCommunicator
     fake_serialcommunicator.SerialCommunicator = FakeEnoceanThread
 
     fake_enocean.utils = fake_utils
     fake_enocean.protocol = fake_protocol
+    fake_protocol.security = security
+    fake_protocol.secure_devices = secure_devices
     fake_enocean.communicators = fake_communicators
 
     sys.modules['enocean'] = fake_enocean
@@ -306,9 +340,29 @@ def install_fake_dependencies():
     sys.modules['enocean.protocol'] = fake_protocol
     sys.modules['enocean.protocol.packet'] = fake_packet
     sys.modules['enocean.protocol.constants'] = fake_constants
+    sys.modules['enocean.protocol.security'] = security
+    sys.modules['enocean.protocol.secure_devices'] = secure_devices
     sys.modules['enocean.communicators'] = fake_communicators
     sys.modules['enocean.communicators.communicator'] = fake_communicators_communicator
     sys.modules['enocean.communicators.serialcommunicator'] = fake_serialcommunicator
+
+
+class MemorySecureStore:
+    '''Stand-in for SecureStore, keeping the security state of secure devices in memory'''
+    def __init__(self, *_args, **_kwargs):
+        self.records = {}
+
+    def states(self):
+        return {address: dict(record['state']) for address, record in self.records.items() if 'state' in record}
+
+    def sender(self, address):
+        return self.records.get(address, {}).get('sender')
+
+    def save_state(self, address, state):
+        self.records.setdefault(address, {})['state'] = dict(state)
+
+    def save_sender(self, address, sender):
+        self.records.setdefault(address, {})['sender'] = sender
 
 
 install_fake_dependencies()
@@ -677,7 +731,11 @@ class DiscoveryAvailabilityTests(unittest.TestCase):
             'mqtt_keepalive': '60',
             'webui_enabled': 'false',
         }
-        return HACommunicator(config, [])
+        comm = HACommunicator(config, [])
+        # Direct callback tests do not run the EnOcean loop. Mark the metadata
+        # collection attempt as complete so they can exercise MQTT behavior.
+        comm._gateway_info_logged = True
+        return comm
 
     def test_ha_discovery_includes_bridge_availability(self):
         comm = self.make_ha_communicator()
@@ -914,6 +972,87 @@ class DiscoveryAvailabilityTests(unittest.TestCase):
                 for item in comm.mqtt.published
             )
         )
+
+    def test_bridge_discovery_omits_unavailable_device_versions(self):
+        comm = self.make_ha_communicator()
+        comm.enocean_sender = [0x11, 0x22, 0x33, 0x44]
+
+        comm._on_connect(comm.mqtt, None, None, 0)
+
+        payloads = [
+            json.loads(item['payload'])
+            for item in comm.mqtt.published
+            if item['topic'].endswith('/config') and item['payload']
+        ]
+        bridge_configs = [
+            item for item in payloads
+            if item.get('device', {}).get('identifiers') == 'enoceanmqtt_bridge_client-1'
+        ]
+
+        self.assertTrue(bridge_configs)
+        for config in bridge_configs:
+            self.assertNotIn('sw_version', config['device'])
+            self.assertNotIn('hw_version', config['device'])
+            self.assertNotIn('null', json.dumps(config['device']))
+
+    def test_bridge_discovery_is_refreshed_when_gateway_info_is_collected(self):
+        comm = self.make_ha_communicator()
+        comm.enocean_sender = [0x11, 0x22, 0x33, 0x44]
+        comm._gateway_info_logged = False
+        comm._collect_gateway_info = lambda: {
+            'base_id': 'FF:EB:E8:80',
+            'esp3': {
+                'appVersion': '2.15.0.0',
+                'apiVersion': '2.6.9.0',
+                'chipId': '058ad7d1',
+                'appDescription': 'GATEWAYCTRL',
+            },
+        }
+
+        comm._on_connect(comm.mqtt, None, None, 0)
+        comm._log_gateway_info()
+
+        version_configs = [
+            json.loads(item['payload'])
+            for item in comm.mqtt.published
+            if item['topic'] == 'homeassistant/sensor/enoceanmqtt_bridge/version/config'
+        ]
+        self.assertEqual(len(version_configs), 1)
+        self.assertEqual(version_configs[0]['device']['sw_version'], '2.6.9.0')
+        self.assertEqual(version_configs[0]['device']['hw_version'], '2.15.0.0')
+
+    def test_discovery_waits_for_gateway_info(self):
+        comm = self.make_ha_communicator()
+        comm.enocean_sender = [0x11, 0x22, 0x33, 0x44]
+        comm._gateway_info_logged = False
+
+        comm._on_connect(comm.mqtt, None, None, 0)
+
+        self.assertFalse(any(item['topic'].endswith('/config') for item in comm.mqtt.published))
+        self.assertEqual(
+            [json.loads(item['payload']) for item in comm.mqtt.published
+             if item['topic'] == 'enoceanmqtt/__system/state'],
+            [{'state': 'offline'}],
+        )
+
+        comm._gateway_info = {
+            'base_id': 'FF:EB:E8:80',
+            'esp3': {
+                'appVersion': '2.15.0.0',
+                'apiVersion': '2.6.9.0',
+                'chipId': '058ad7d1',
+                'appDescription': 'GATEWAYCTRL',
+            },
+        }
+        comm._gateway_info_logged = True
+        comm._on_gateway_info_updated()
+
+        self.assertTrue(any(item['topic'].endswith('/config') for item in comm.mqtt.published))
+        state_publishes = [
+            json.loads(item['payload']) for item in comm.mqtt.published
+            if item['topic'] == 'enoceanmqtt/__system/state'
+        ]
+        self.assertEqual(state_publishes[-1], {'state': 'online'})
 
     def test_learn_state_is_republished_when_learn_changes(self):
         comm = self.make_ha_communicator()
