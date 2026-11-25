@@ -22,6 +22,7 @@ class HeaterMappingTests(unittest.TestCase):
             'mqtt_prefix': 'enoceanmqtt/',
             'mqtt_discovery_prefix': 'homeassistant/',
             'db_file': os.path.join(self.tmpdir.name, 'db.json'),
+            'webui_enabled': False,
         }
         self.sensor = {'name': 'enoceanmqtt/heater', 'address': 0x058EDA56,
                        'rorg': 0xD2, 'func': 0x33, 'type': 0x00}
