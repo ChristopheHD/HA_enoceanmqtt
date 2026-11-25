@@ -4963,7 +4963,7 @@
               {% if entity is search('config_valve_position',ignorecase=True) %}
                 {% set ns.valve_position = (states(entity)|int(default=0)) %}
               {% elif entity is search('config_temperature_setpoint',ignorecase=True) %}
-                {% set ns.temperature_setpoint = ((states(entity)|int(default=0))*2) %}
+                {% set ns.temperature_setpoint = ((states(entity)|float(default=0.0))*2)|round|int %}
               {% elif entity is search('config_temperature_RCU',ignorecase=True) %}
                 {% set ns.TMP = ((states(entity)|float(default=0.0))) %}
               {% elif entity is search('config_REF',ignorecase=True) %}
