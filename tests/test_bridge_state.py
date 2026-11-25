@@ -896,6 +896,18 @@ class DiscoveryAvailabilityTests(unittest.TestCase):
         self.assertEqual(eep_sensors[0]['name'], 'enoceanmqtt/entry_sensor')
         self.assertEqual(eep_sensors[0]['address'], 0x12345678)
 
+        unsecured_sensors = comm._expand_device({
+            'id': 'unsecured-heater-id',
+            'name': 'unsecured_heater',
+            'address': 0x12345679,
+            'rorg': 0xD2,
+            'func': 0x33,
+            'type': 0x00,
+            'secured': False
+        })
+        self.assertNotIn('secure_teachin_telegrams', unsecured_sensors[0])
+        self.assertNotIn('secure_teachin_bidirectional', unsecured_sensors[0])
+
         model_sensors = comm._expand_device({
             'id': 'model-id',
             'name': 'window_cover',

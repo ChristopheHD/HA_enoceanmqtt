@@ -6,6 +6,8 @@ const virtualCheckbox = document.querySelector('#device-virtual');
 const senderField = document.querySelector('#sender-field');
 const senderInput = document.querySelector('#device-sender');
 const securityFields = document.querySelector('#security-fields');
+const securedCheckbox = document.querySelector('#device-secured');
+const secureOptions = document.querySelector('#secure-options');
 const secureTeachinTelegrams = document.querySelector('#secure-teachin-telegrams');
 const secureTeachinBidirectional = document.querySelector('#secure-teachin-bidirectional');
 const message = document.querySelector('#form-message');
@@ -56,6 +58,8 @@ function renderSecurityFields(security = null) {
   const settings = security || mappedSecurity;
   securityFields.hidden = !settings;
   if (!settings) return;
+  securedCheckbox.checked = Boolean(settings.secured);
+  secureOptions.hidden = !securedCheckbox.checked;
   secureTeachinTelegrams.value = String(settings.secure_teachin_telegrams || 2);
   secureTeachinBidirectional.checked = Boolean(settings.secure_teachin_bidirectional);
 }
@@ -240,6 +244,9 @@ virtualCheckbox.addEventListener('change', () => {
   senderInput.required = virtualCheckbox.checked;
   if (!virtualCheckbox.checked) senderInput.value = '';
 });
+securedCheckbox.addEventListener('change', () => {
+  secureOptions.hidden = !securedCheckbox.checked;
+});
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   showMessage('');
@@ -251,9 +258,10 @@ form.addEventListener('submit', async (event) => {
     profile: profileSelect.value,
     address: document.querySelector('#device-address').value.trim(),
     virtual: virtualCheckbox.checked,
+    secured: securedCheckbox.checked,
     sender: senderInput.value.trim()
   };
-  if (!securityFields.hidden) {
+  if (!securityFields.hidden && securedCheckbox.checked) {
     payload.secure_teachin_telegrams = Number(secureTeachinTelegrams.value);
     payload.secure_teachin_bidirectional = secureTeachinBidirectional.checked;
   }

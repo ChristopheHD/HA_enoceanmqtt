@@ -163,6 +163,7 @@ class DeviceWebTests(unittest.TestCase):
             item for item in options['eeps'] if item['value'] == 'A5-02-02'
         )
         self.assertEqual(default_profile['security'], {
+            'secured': False,
             'secure_teachin_telegrams': 2,
             'secure_teachin_bidirectional': False
         })
@@ -172,11 +173,24 @@ class DeviceWebTests(unittest.TestCase):
             'type': 'eep',
             'profile': 'A5-02-02',
             'address': '12345678',
+            'secured': True,
             'secure_teachin_telegrams': 3,
             'secure_teachin_bidirectional': True
         })
+        self.assertTrue(device['secured'])
         self.assertEqual(device['secure_teachin_telegrams'], 3)
         self.assertTrue(device['secure_teachin_bidirectional'])
+
+        unsecured = self.server._validate_device({
+            'name': 'plain_entry',
+            'type': 'eep',
+            'profile': 'A5-02-01',
+            'address': '87654321',
+            'secured': False
+        })
+        self.assertFalse(unsecured['secured'])
+        self.assertNotIn('secure_teachin_telegrams', unsecured)
+        self.assertNotIn('secure_teachin_bidirectional', unsecured)
 
     def test_device_address_requires_four_hexadecimal_bytes(self):
         payload = {
@@ -250,6 +264,7 @@ class DeviceWebTests(unittest.TestCase):
             'profile': 'A5-02-01',
             'address': '87654321',
             'virtual': False,
+            'secured': True,
             'secure_teachin_telegrams': 2,
             'secure_teachin_bidirectional': False
         }).encode('utf-8')
@@ -263,6 +278,7 @@ class DeviceWebTests(unittest.TestCase):
         updated = json.loads(response.read().decode('utf-8'))['device']
         self.assertEqual(updated['id'], device['id'])
         self.assertEqual(updated['name'], 'entry_sensor_renamed')
+        self.assertTrue(updated['security']['secured'])
         self.assertEqual(updated['security']['secure_teachin_telegrams'], 2)
         self.assertEqual(self.changes[-1], ('update', device['id']))
 

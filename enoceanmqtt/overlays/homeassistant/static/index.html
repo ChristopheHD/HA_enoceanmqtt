@@ -91,28 +91,6 @@ FORM: Operate / device register with a focused, native add-device dialog.
             <small>Enter exactly 8 hexadecimal digits (4 bytes). Do not include 0x.</small>
           </label>
 
-          <section id="security-fields" class="security-fields" aria-labelledby="security-title" hidden>
-            <h3 id="security-title">Secure device settings</h3>
-            <p>Used when the device supports secure teach-in. Encryption keys are paired and stored automatically by the bridge.</p>
-            <label class="field">
-              <span>Secure teach-in telegrams</span>
-              <select id="secure-teachin-telegrams" name="secure_teachin_telegrams">
-                <option value="2">2 telegrams</option>
-                <option value="3">3 telegrams</option>
-              </select>
-            </label>
-            <div class="virtual-row">
-              <div>
-                <span class="virtual-title">Bidirectional secure teach-in</span>
-                <small>Enable only when required by this device.</small>
-              </div>
-              <label class="switch" aria-label="Bidirectional secure teach-in">
-                <input id="secure-teachin-bidirectional" name="secure_teachin_bidirectional" type="checkbox">
-                <span class="switch-track" aria-hidden="true"></span>
-              </label>
-            </div>
-          </section>
-
           <div class="virtual-row">
             <div>
               <span class="virtual-title">Virtual device</span>
@@ -130,6 +108,40 @@ FORM: Operate / device register with a focused, native add-device dialog.
                    placeholder="FF123456" maxlength="10">
             <small>Enter the transmitter’s Base ID or assigned sender ID.</small>
           </label>
+
+          <section id="security-fields" class="security-fields" aria-labelledby="security-title" hidden>
+            <h3 id="security-title">Secure device settings</h3>
+            <div class="virtual-row">
+              <div>
+                <span class="virtual-title">Secured device</span>
+                <small>Configure encryption for this device.</small>
+              </div>
+              <label class="switch" aria-label="Secured device">
+                <input id="device-secured" name="secured" type="checkbox">
+                <span class="switch-track" aria-hidden="true"></span>
+              </label>
+            </div>
+            <div id="secure-options" class="secure-options" hidden>
+              <p>Encryption keys are paired and stored automatically by the bridge.</p>
+              <label class="field">
+                <span>Secure teach-in telegrams</span>
+                <select id="secure-teachin-telegrams" name="secure_teachin_telegrams">
+                  <option value="2">2 telegrams</option>
+                  <option value="3">3 telegrams</option>
+                </select>
+              </label>
+              <div class="virtual-row">
+                <div>
+                  <span class="virtual-title">Bidirectional secure teach-in</span>
+                  <small>Enable only when required by this device.</small>
+                </div>
+                <label class="switch" aria-label="Bidirectional secure teach-in">
+                  <input id="secure-teachin-bidirectional" name="secure_teachin_bidirectional" type="checkbox">
+                  <span class="switch-track" aria-hidden="true"></span>
+                </label>
+              </div>
+            </div>
+          </section>
 
           <p id="form-message" class="message" role="status" aria-live="polite"></p>
           <button id="submit-button" class="primary-button" type="submit">

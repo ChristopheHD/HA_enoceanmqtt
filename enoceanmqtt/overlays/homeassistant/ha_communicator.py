@@ -93,6 +93,10 @@ class HACommunicator(Communicator):
                 rorg = new_sensor.get('rorg')
                 new_sensor['name'] = base_name + '/' + str(rorg)[2:4].lower()
                 new_sensor['address'] = device['address']
+                secured = device.get('secured')
+                if secured is False:
+                    new_sensor.pop('secure_teachin_telegrams', None)
+                    new_sensor.pop('secure_teachin_bidirectional', None)
                 for field in (
                         'default_data',
                         'sender',
@@ -127,6 +131,10 @@ class HACommunicator(Communicator):
             ].get('device_config', {})
         except KeyError:
             device_map = {}
+        secured = device.get('secured')
+        if secured is False:
+            new_sensor.pop('secure_teachin_telegrams', None)
+            new_sensor.pop('secure_teachin_bidirectional', None)
         for field in (
                 'command',
                 'channel',
@@ -135,6 +143,8 @@ class HACommunicator(Communicator):
                 'answer',
                 'secure_teachin_telegrams',
                 'secure_teachin_bidirectional'):
+            if field.startswith('secure_') and secured is False:
+                continue
             if field in device:
                 new_sensor[field] = device[field]
                 continue

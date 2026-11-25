@@ -314,6 +314,7 @@ class DeviceWebServer:
             for field in ('secure_teachin_telegrams', 'secure_teachin_bidirectional'):
                 if field in config and field not in security:
                     security[field] = config[field]
+        security['secured'] = bool(security)
         security['secure_teachin_telegrams'] = int(
             security.get('secure_teachin_telegrams', 2)
         )
@@ -338,6 +339,15 @@ class DeviceWebServer:
         if option is None or option.get('security') is None:
             return None
         security = dict(option['security'])
+        if 'secured' in device:
+            security['secured'] = device['secured'] is True
+        elif any(
+                field in device
+                for field in (
+                    'secure_teachin_telegrams',
+                    'secure_teachin_bidirectional'
+                )):
+            security['secured'] = True
         if 'secure_teachin_telegrams' in device:
             security['secure_teachin_telegrams'] = int(
                 device['secure_teachin_telegrams']
@@ -396,24 +406,29 @@ class DeviceWebServer:
 
         if profile_option.get('security') is not None:
             mapped_security = profile_option['security']
-            telegrams = payload.get(
-                'secure_teachin_telegrams',
-                mapped_security.get('secure_teachin_telegrams', 2)
-            )
-            try:
-                telegrams = int(telegrams)
-            except (TypeError, ValueError) as error:
-                raise ValueError("Secure teach-in telegrams must be 2 or 3.") from error
-            if telegrams not in (2, 3):
-                raise ValueError("Secure teach-in telegrams must be 2 or 3.")
-            bidirectional = payload.get(
-                'secure_teachin_bidirectional',
-                mapped_security.get('secure_teachin_bidirectional', False)
-            )
-            if not isinstance(bidirectional, bool):
-                raise ValueError("Choose whether secure teach-in is bidirectional.")
-            device['secure_teachin_telegrams'] = telegrams
-            device['secure_teachin_bidirectional'] = bidirectional
+            secured = payload.get('secured', mapped_security.get('secured', False))
+            if not isinstance(secured, bool):
+                raise ValueError("Choose whether this is a secured device.")
+            device['secured'] = secured
+            if secured:
+                telegrams = payload.get(
+                    'secure_teachin_telegrams',
+                    mapped_security.get('secure_teachin_telegrams', 2)
+                )
+                try:
+                    telegrams = int(telegrams)
+                except (TypeError, ValueError) as error:
+                    raise ValueError("Secure teach-in telegrams must be 2 or 3.") from error
+                if telegrams not in (2, 3):
+                    raise ValueError("Secure teach-in telegrams must be 2 or 3.")
+                bidirectional = payload.get(
+                    'secure_teachin_bidirectional',
+                    mapped_security.get('secure_teachin_bidirectional', False)
+                )
+                if not isinstance(bidirectional, bool):
+                    raise ValueError("Choose whether secure teach-in is bidirectional.")
+                device['secure_teachin_telegrams'] = telegrams
+                device['secure_teachin_bidirectional'] = bidirectional
 
         sender = payload.get('sender', '')
         if sender:

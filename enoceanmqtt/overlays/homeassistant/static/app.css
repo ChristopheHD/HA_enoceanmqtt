@@ -522,6 +522,10 @@ h2 {
   display: none;
 }
 
+.secure-options[hidden] {
+  display: none;
+}
+
 .security-fields h3 {
   margin: 0 0 5px;
   font-size: 13px;
