@@ -569,13 +569,15 @@ class Communicator:
     def _parse_number(value):
         '''parse a value received over MQTT: integers for raw and enum values,
         decimals for scaled values (e.g. a temperature setpoint)'''
-        if isinstance(value, float):  # JSON number: int(21.4) would silently give 21
-            return int(value) if value.is_integer() else value
-        try:
-            return int(value)
-        except ValueError:
-            number = float(value)
-            return int(number) if number.is_integer() else number
+        if isinstance(value, float):  # JSON number, e.g. 21.4 or 21.0
+            number = value
+        else:
+            try:
+                return int(value)
+            except ValueError:
+                number = float(value)
+        # integral values must stay int: enum and raw fields need an int
+        return int(number) if number.is_integer() else number
 
     def _send_requested(self, sensor, clear, secure_teachin):
         '''Send what an MQTT message asked for: a secure teach-in, or the data of the sensor.'''
