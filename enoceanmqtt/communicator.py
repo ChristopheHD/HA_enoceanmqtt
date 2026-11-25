@@ -569,6 +569,8 @@ class Communicator:
     def _parse_number(value):
         '''parse a value received over MQTT: integers for raw and enum values,
         decimals for scaled values (e.g. a temperature setpoint)'''
+        if isinstance(value, float):  # JSON number: int(21.4) would silently give 21
+            return int(value) if value.is_integer() else value
         try:
             return int(value)
         except ValueError:
