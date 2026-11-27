@@ -5096,7 +5096,7 @@
         answer: ""
       entities:
       - component: "switch"
-        name: "switch_COM1"
+        name: "switch"
         config:
           state_topic: ""
           state_on: "on"
@@ -5108,22 +5108,8 @@
             {"COM":"1","TIM":"0","LCK":"0","DEL":"0","SW":"1","send":"clear"}
           payload_off: >
             {"COM":"1","TIM":"0","LCK":"0","DEL":"0","SW":"0","send":"clear"}
-          device_class: outlet
-          enabled_by_default: "false"
-      - component: "light"
-        name: "light_COM1"
-        config:
-          schema: "template"
-          state_topic: ""
-          state_template: >-
-            {% if value_json.SW == 1 %}on{% else %}off{% endif %}
-          command_topic: "req"
-          command_on_template: >-
-            {"COM":"1","TIM":"0","LCK":"0","DEL":"0","SW":"1","send":"clear"}
-          command_off_template: >-
-            {"COM":"1","TIM":"0","LCK":"0","DEL":"0","SW":"0","send":"clear"}
       - component: "button"
-        name: "learn_COM1"
+        name: "learn_switch"
         config:
           command_topic: "req"
           payload_press: >-
@@ -5131,7 +5117,7 @@
           icon: "mdi:link-plus"
           enabled_by_default: "false"
       - component: "light"
-        name: "light_COM2"
+        name: "light"
         config:
           schema: "template"
           state_topic: ""
@@ -5144,6 +5130,14 @@
             {"COM":"2","EDIM":"{{ ((brightness | default(255)) * 100 / 255) | int }}","RMP":"1","EDIMR":"0","STR":"0","SW":"1","send":"clear"}
           command_off_template: >-
             {"COM":"2","EDIM":"0","RMP":"1","EDIMR":"0","STR":"0","SW":"0","send":"clear"}
+      - component: "button"
+        name: "learn_light"
+        config:
+          command_topic: "req"
+          payload_press: >-
+            {"COM":"2","EDIM":"0","RMP":"1","EDIMR":"0","STR":"0","SW":"0","LRN":"0","send":"clear"}
+          icon: "mdi:link-plus"
+          enabled_by_default: "false"
 0xF6:
   0x02:
     0x01: &F60201
