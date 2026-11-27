@@ -5287,6 +5287,15 @@
           topic: ""
           payload: "17"
           value_template: "{{ value_json.WAS }}"
+      - component: binary_sensor
+        name: "water"
+        config:
+          state_topic: ""
+          device_class: moisture
+          payload_on: "on"
+          payload_off: "off"
+          value_template: >-
+            {% if value_json.get('_RAW_DATA_', '').split(':')[-1] | lower == '30' %}on{% else %}off{% endif %}
     0x02:
       device_config:
         command: ""
