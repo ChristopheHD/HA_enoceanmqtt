@@ -5096,40 +5096,48 @@
         answer: ""
       entities:
       - component: "switch"
-        name: "switch_COM1"
+        name: "switch"
         config:
+          state_topic: ""
+          state_on: "on"
+          state_off: "off"
+          value_template: >-
+            {% if value_json.SW == 1 %}on{% else %}off{% endif %}
           command_topic: "req"
           payload_on: >
             {"COM":"1","TIM":"0","LCK":"0","DEL":"0","SW":"1","send":"clear"}
           payload_off: >
             {"COM":"1","TIM":"0","LCK":"0","DEL":"0","SW":"0","send":"clear"}
-          device_class: outlet
-          enabled_by_default: "false"
-      - component: "light"
-        name: "light_COM1"
+      - component: "button"
+        name: "learn_switch"
         config:
-          schema: "template"
-          command_topic: "req"
-          command_on_template: >-
-            {"COM":"1","TIM":"0","LCK":"0","DEL":"0","SW":"1","send":"clear"}
-          command_off_template: >-
-            {"COM":"1","TIM":"0","LCK":"0","DEL":"0","SW":"0","send":"clear"}
-      - component: "light"
-        name: "light_COM2"
-        config:
-          schema: "template"
           command_topic: "req"
           payload_press: >-
-            {"send":"clear"}
+            {"COM":"1","TIM":"0","LCK":"0","DEL":"0","SW":"0","LRN":"0","send":"clear"}
+          icon: "mdi:link-plus"
+          enabled_by_default: "false"
       - component: "light"
-        name: "light_COM2"
+        name: "light"
         config:
           schema: "template"
+          state_topic: ""
+          state_template: >-
+            {% if value_json.SW == 1 and value_json.EDIM | default(1) > 0 %}on{% else %}off{% endif %}
+          brightness_template: >-
+            {{ (value_json.EDIM | default(100) | int * 255 / 100) | int }}
           command_topic: "req"
           command_on_template: >-
-            {"COM":"2","EDIM":"100","RMP":"1","EDIMR":"0","STR":"0","SW":"1","send":"clear"}
+            {"COM":"2","EDIM":"{{ ((brightness | default(255)) * 100 / 255) | int }}","RMP":"1","EDIMR":"0","STR":"0","SW":"1","send":"clear"}
           command_off_template: >-
             {"COM":"2","EDIM":"0","RMP":"1","EDIMR":"0","STR":"0","SW":"0","send":"clear"}
+      - component: "button"
+        name: "learn_light"
+        config:
+          command_topic: "req"
+          payload_press: >-
+            {"COM":"2","EDIM":"0","RMP":"1","EDIMR":"0","STR":"0","SW":"0","LRN":"0","send":"clear"}
+          icon: "mdi:link-plus"
+          enabled_by_default: "false"
 0xF6:
   0x02:
     0x01: &F60201
@@ -6434,6 +6442,55 @@ lunos:
         payload_off: "off"
         value_template: >-
           {% if value_json.FMS == 1 %}on{% else %}off{% endif %}
+
+leviton:
+  # WSP20-9D0 EnOcean line-voltage relay receiver (speaks A5-38-08 with quirks)
+  # https://www.leviton.com/fr/products/wsp20-9d0
+  # - accepts COM1 or COM2 commands but always answers as COM2
+  # - reports EDIM as a percentage that can reach 255% as well as SW
+  # - SW is asymmetric between command and report:
+  #     SW    | command      | report
+  #     ------+--------------+------------------
+  #     0     | close relay  | relay open
+  #     1     | open relay   | relay closed
+  #   The value_template inverts the command side only, so HA state
+  #   mirrors the physical relay.
+  # - Does not support UTE teach-in, need 4BS telegram with LRN 0
+  #   Newer units can invert polarity in their own settings;
+  #   this mapping assumes it cannot, so the inversion is applied here.
+  wsp20_9d0:
+    device_config:
+      - rorg: "0xA5"
+        func: "0x38"
+        type: "0x08"
+        command: "COM" # accepts COM1 or COM2, always answers as COM2
+        channel: ""
+        log_learn: ""
+        direction: ""
+        answer: ""
+    entities:
+      - component: "button"
+        name: "Send_Teach-in_telegram"
+        config:
+          command_topic: "a5/req"
+          payload_press: >-
+            {"COM":"1","TIM":"0","LCK":"0","DEL":"0","SW":"0","LRN":"0","send":"clear"}
+          icon: "mdi:link-plus"
+          entity_category: "config"
+      - component: "switch"
+        name: "Relay_Output"
+        config:
+          state_topic: "a5"
+          state_on: "on"
+          state_off: "off"
+          value_template: >-
+            {% if value_json.SW == 1 %}on{% else %}off{% endif %}
+          command_topic: "a5/req"
+          payload_on: >
+            {"COM":"1","TIM":"0","LCK":"0","DEL":"0","SW":"0","send":"clear"}
+          payload_off: >
+            {"COM":"1","TIM":"0","LCK":"0","DEL":"0","SW":"1","send":"clear"}
+          icon: "mdi:electric-switch"
 
 # Below are mappings common to all EEPs
 common:
