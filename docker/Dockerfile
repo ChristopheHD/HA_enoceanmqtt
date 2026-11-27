@@ -29,6 +29,8 @@ ENV TZ=Europe/London
 
 COPY --from=builder /usr/local /usr/local
 
+EXPOSE 8080
+
 STOPSIGNAL SIGINT
 
 ENTRYPOINT [ "python", "/usr/local/bin/enoceanmqtt", "/config/enoceanmqtt.conf" ]

@@ -59,6 +59,12 @@ spec:
           envFrom:
             {{ toYaml . | nindent 12 }}
           {{- end }}
+          {{- if .Values.webui.enabled }}
+          ports:
+            - name: webui
+              containerPort: {{ .Values.webui.port }}
+              protocol: TCP
+          {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:

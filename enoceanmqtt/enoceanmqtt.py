@@ -108,8 +108,10 @@ def main():
     setup_logging(conf['logfile'], logging.DEBUG if conf['debug'] else logging.INFO)
 
     # load config file
-    sensors, global_config = load_config_file(conf['config'])
+    config_files = conf['config']
+    sensors, global_config = load_config_file(config_files)
     conf.update(global_config)
+    conf['config_files'] = config_files
 
     # Select the overlay
     if str(global_config.get('overlay')).lower() == "ha":

@@ -52,6 +52,20 @@ HA_enoceanmqtt can also be installed as a Home Assistant addon.
 This installation suits all Home Assistant installations with Supervisor.  
 See [Home Assistant Addon Installation](https://github.com/ChristopheHD/HA_enoceanmqtt/wiki/Home-Assistant-Addon) for more details.
 
+# Device Management UI
+
+The Home Assistant overlay includes a web UI for adding and removing devices
+while the bridge is running. Select from EEP profiles and models in
+`mapping.yaml`, configure virtual devices, and manage the device registry
+without editing the INI file. Device settings are stored in TinyDB; existing
+INI device sections are imported once on first startup and the INI file remains
+unchanged. The UI is available at `http://<bridge-host>:8080/` by default.
+
+![Home Assistant EnOcean bridge device-management homepage](.github/images/device-management-ui.png)
+
+See [Device management UI usage](docs/usage.md#device-management-ui) for
+configuration and access details.
+
 # Usage
 
 Refer to [Normal Usage](docs/usage.md) for more details.

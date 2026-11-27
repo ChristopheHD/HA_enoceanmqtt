@@ -28,12 +28,20 @@ class SecureStoreTests(unittest.TestCase):
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
         self.path = os.path.join(self.tmpdir.name, 'device_db.json')
+        self.databases = []
 
     def tearDown(self):
+        for db in self.databases:
+            db.close()
         self.tmpdir.cleanup()
 
     def open(self):
-        return secure_store.SecureStore(database.open_database(self.path))
+        return secure_store.SecureStore(self.open_database())
+
+    def open_database(self):
+        db = database.open_database(self.path)
+        self.databases.append(db)
+        return db
 
     def test_unknown_device(self):
         store = self.open()
@@ -55,18 +63,18 @@ class SecureStoreTests(unittest.TestCase):
         self.assertIsNone(self.open().sender(ADDRESS))
 
     def test_kept_in_its_own_table_of_the_device_database(self):
-        db = database.open_database(self.path)
+        db = self.open_database()
         db.insert({'name': 'enoceanmqtt/heater', 'address': ADDRESS})
         secure_store.SecureStore(db).save_state(ADDRESS, STATE)
 
-        db = database.open_database(self.path)
+        db = self.open_database()
         self.assertEqual(db.all(), [{'name': 'enoceanmqtt/heater', 'address': ADDRESS}])
         with open(self.path, encoding='utf-8') as file:
             self.assertEqual(json.load(file)['secure_devices'], {str(ADDRESS): {'address': ADDRESS, 'state': STATE}})
 
     def test_concurrent_changes_are_not_lost(self):
         # Rolling codes are saved by the EnOcean thread while the MQTT thread updates the devices
-        db = database.open_database(self.path)
+        db = self.open_database()
         store = secure_store.SecureStore(db)
 
         def save_states(address):
@@ -83,12 +91,14 @@ class SecureStoreTests(unittest.TestCase):
         for thread in threads:
             thread.join()
 
-        db = database.open_database(self.path)
+        db = self.open_database()
         self.assertEqual(len(db.all()), 40)
         self.assertEqual(secure_store.SecureStore(db).states(),
                          {1: dict(STATE, rlc_snd=39), 2: dict(STATE, rlc_snd=39)})
 
     def test_database_is_private(self):
+        if os.name == 'nt':
+            self.skipTest('POSIX file permission modes are not available on Windows')
         self.open()
         self.assertEqual(stat.S_IMODE(os.stat(self.path).st_mode), 0o600)
         os.chmod(self.path, 0o644)
